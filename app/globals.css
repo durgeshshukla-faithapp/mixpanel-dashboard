@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #0F1419;
+  color: #E8ECF1;
+}
+
+::-webkit-scrollbar { height: 6px; width: 6px; }
+::-webkit-scrollbar-thumb { background: #2A323D; border-radius: 3px; }
+
+.num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
