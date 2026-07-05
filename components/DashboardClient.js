@@ -15,8 +15,16 @@ function fmtNum(n) {
 }
 
 // Shortens long Mixpanel metric names like "C. Sum of value on register_succeed" -> "Sum of value"
+// and "A. Uniques of register_succeed" -> "Uniques"
 function shortMetricName(name) {
-  return name.replace(/^[A-Z]\.\s*/, '').replace(/\s+on\s+\w+$/i, '');
+  return name.replace(/^[A-Z]\.\s*/, '').replace(/\s+(of|on)\s+\S+$/i, '');
+}
+
+// Formats "2025-07-10" -> "Jul 10, 2025" to match Mixpanel's date style
+function fmtDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function DashboardClient({ matrices }) {
@@ -137,8 +145,9 @@ export default function DashboardClient({ matrices }) {
       });
     });
     rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const q = tableSearch.toLowerCase();
     const filtered = tableSearch
-      ? rows.filter((r) => r.source.toLowerCase().includes(tableSearch.toLowerCase()))
+      ? rows.filter((r) => r.source.toLowerCase().includes(q) || fmtDate(r.date).toLowerCase().includes(q))
       : rows;
     const overallValues = metricKeys.map((_, i) => filtered.reduce((sum, r) => sum + r.values[i], 0));
     return { rows: filtered, overallValues };
@@ -306,9 +315,17 @@ export default function DashboardClient({ matrices }) {
             <input
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
-              placeholder="Search source..."
+              placeholder="Search source or date..."
               className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs flex-1 min-w-[160px]"
             />
+            <select
+              value=""
+              onChange={(e) => e.target.value && setTableSearch(e.target.value)}
+              className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
+            >
+              <option value="">Jump to source...</option>
+              {mat.sources.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
             <button
               onClick={downloadCsv}
               className="text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-accentDim transition"
@@ -320,10 +337,10 @@ export default function DashboardClient({ matrices }) {
             <table className="w-full text-xs">
               <thead>
                 <tr>
-                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface">Source</th>
-                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface">Date</th>
+                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap">Source</th>
+                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap">Date</th>
                   {metricKeys.map((k) => (
-                    <th key={k} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface">
+                    <th key={k} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap">
                       {shortMetricName(k)}
                     </th>
                   ))}
@@ -333,7 +350,7 @@ export default function DashboardClient({ matrices }) {
                 {detailedRows.rows.map((r, i) => (
                   <tr key={r.source + r.date + i}>
                     <td className="py-2 px-2 border-b border-border">{r.source}</td>
-                    <td className="py-2 px-2 border-b border-border num text-dim">{r.date}</td>
+                    <td className="py-2 px-2 border-b border-border num text-dim whitespace-nowrap">{fmtDate(r.date)}</td>
                     {r.values.map((v, j) => (
                       <td key={j} className="text-right py-2 px-2 border-b border-border num">{fmtNum(v)}</td>
                     ))}

@@ -89,3 +89,31 @@ Har page ke top-right mein ☾/☀ button se dark/light switch ho jaata hai, bro
 Har dashboard ke andar "Breakdown" tab — Mixpanel jaisi table: har source ek row, saare metrics
 (Uniques/Events/Revenue) columns mein side-by-side, poore selected date range ka total.
 
+
+## Agar kabhi locked out ho jao (backup plan)
+
+Vercel mein ek naya env var add karo: `SUPER_ADMIN_EMAIL` = aapka email.
+Yeh email **hamesha** poora access karega, chahe `Access` sheet khaali ho, galat ho, ya
+Google Sheets se connection hi fail ho jaye. Isse aap kabhi bhi khud ko lock nahi karoge.
+
+## Request access
+
+`NEXT_PUBLIC_ADMIN_EMAIL` env var set karo — jo bhi access-denied dekhega, use ek
+"Request access" button milega jo aapko seedha email bhej dega.
+
+## Reliability
+
+- Har route ka apna `loading.js` (skeleton) aur `error.js` (retry button) hai
+- Ek dashboard fail ho toh baaki dashboards par asar nahi padta (isolated error boundaries)
+- Jin sources ka poore date range mein data hi nahi hai (sab zero), unhe automatically
+  hata diya jaata hai — filter chips saaf rehte hain aur payload chhota rehta hai
+
+## Future: Postgres ya kisi doosre database ka data mix karna
+
+Abhi sirf Mixpanel se data aata hai. Future mein Postgres (ya koi aur source) add karne ke liye:
+1. `lib/postgres.js` jaisi ek nayi file banao jo apna data isi shape mein return kare:
+   `{ sources: [...], dates: [...], data: { source: { date: value } } }`
+2. Dashboard page mein Mixpanel ke matrices ke saath is naye source ka data merge karo
+   (same date keys use karke)
+3. `DashboardClient` ko koi change nahi karna padega — woh sirf iss shape ko samajhta hai,
+   data kahan se aaya usse farak nahi padta

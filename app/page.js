@@ -4,6 +4,7 @@ import { getReports, isTagAllowed } from '@/lib/googleSheets';
 import SignInButton from '@/components/SignInButton';
 import ThemeToggle from '@/components/ThemeToggle';
 import DashboardGrid from '@/components/DashboardGrid';
+import RequestAccess from '@/components/RequestAccess';
 
 export const revalidate = 60;
 
@@ -48,9 +49,10 @@ export default async function HomePage() {
       </div>
 
       {reports.length === 0 ? (
-        <p className="text-dim text-sm">
-          No dashboards available for your account yet.
-        </p>
+        <div className="text-dim text-sm">
+          <p className="mb-2">No dashboards available for your account yet.</p>
+          <RequestAccess dashboardName="access" />
+        </div>
       ) : (
         <DashboardGrid reports={reports} availableTags={availableTags} />
       )}
