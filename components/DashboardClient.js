@@ -21,7 +21,8 @@ function shortMetricName(name) {
 
 export default function DashboardClient({ matrices }) {
   const metricKeys = Object.keys(matrices);
-  const [view, setView] = useState('trend'); // 'trend' | 'breakdown'
+  const [view, setView] = useState('trend'); // 'trend' | 'table' | 'breakdown'
+  const [tableSearch, setTableSearch] = useState('');
   const [metric, setMetric] = useState(metricKeys[0] || '');
   const mat = matrices[metric] || { sources: [], dates: [], data: {} };
 
@@ -125,11 +126,44 @@ export default function DashboardClient({ matrices }) {
     return [overallRow, ...rows];
   }, [matrices, metricKeys, dateFrom, dateTo]);
 
+  // Detailed table: one row per (source, date), all metrics side by side - mirrors Mixpanel's own table exactly
+  const detailedRows = useMemo(() => {
+    const allSources = Array.from(new Set(metricKeys.flatMap((k) => matrices[k].sources)));
+    const rows = [];
+    dates.forEach((d) => {
+      allSources.forEach((source) => {
+        const values = metricKeys.map((k) => (matrices[k].data[source] && matrices[k].data[source][d]) || 0);
+        if (values.some((v) => v > 0)) rows.push({ source, date: d, values });
+      });
+    });
+    rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const filtered = tableSearch
+      ? rows.filter((r) => r.source.toLowerCase().includes(tableSearch.toLowerCase()))
+      : rows;
+    const overallValues = metricKeys.map((_, i) => filtered.reduce((sum, r) => sum + r.values[i], 0));
+    return { rows: filtered, overallValues };
+  }, [matrices, metricKeys, dates, tableSearch]);
+
+  function downloadCsv() {
+    const headers = ['Source', 'Date', ...metricKeys.map(shortMetricName)];
+    const lines = [headers.join(',')];
+    detailedRows.rows.forEach((r) => {
+      lines.push([r.source, r.date, ...r.values].join(','));
+    });
+    lines.push(['Overall', '', ...detailedRows.overallValues].join(','));
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'dashboard-data.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
       {/* View tabs */}
       <div className="flex gap-1 mb-5 border-b border-border">
-        {[['trend', 'Trend'], ['breakdown', 'Breakdown']].map(([key, label]) => (
+        {[['trend', 'Trend'], ['table', 'Table'], ['breakdown', 'Breakdown']].map(([key, label]) => (
           <button
             key={key}
             onClick={() => setView(key)}
@@ -265,6 +299,57 @@ export default function DashboardClient({ matrices }) {
               )}
             </ResponsiveContainer>
           )}
+        </div>
+      ) : view === 'table' ? (
+        <div className="border border-border bg-surface rounded-2xl p-5">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <input
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Search source..."
+              className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs flex-1 min-w-[160px]"
+            />
+            <button
+              onClick={downloadCsv}
+              className="text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-accentDim transition"
+            >
+              Export CSV
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-[500px]">
+            <table className="w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface">Source</th>
+                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface">Date</th>
+                  {metricKeys.map((k) => (
+                    <th key={k} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface">
+                      {shortMetricName(k)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {detailedRows.rows.map((r, i) => (
+                  <tr key={r.source + r.date + i}>
+                    <td className="py-2 px-2 border-b border-border">{r.source}</td>
+                    <td className="py-2 px-2 border-b border-border num text-dim">{r.date}</td>
+                    {r.values.map((v, j) => (
+                      <td key={j} className="text-right py-2 px-2 border-b border-border num">{fmtNum(v)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-medium">
+                  <td className="py-2 px-2 border-t border-border" colSpan={2}>Overall</td>
+                  {detailedRows.overallValues.map((v, j) => (
+                    <td key={j} className="text-right py-2 px-2 border-t border-border num">{fmtNum(v)}</td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="border border-border bg-surface rounded-2xl p-5 overflow-x-auto">
