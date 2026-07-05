@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 
 const PALETTE = ['#3DDC97', '#5B9FE8', '#F0A868', '#C58FE0', '#F0685C', '#4FD1D9', '#E8C15B', '#8B96A5'];
+const OVERALL = 'Overall';
 
 function fmtNum(n) {
   if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(2) + 'M';
@@ -24,15 +25,23 @@ export default function DashboardClient({ matrices }) {
   const [metric, setMetric] = useState(metricKeys[0] || '');
   const mat = matrices[metric] || { sources: [], dates: [], data: {} };
 
-  const [selectedSources, setSelectedSources] = useState(() => new Set(mat.sources.slice(0, 5)));
+  // Value lookup that understands the synthetic "Overall" source (sum of every real source)
+  function valueFor(source, date) {
+    if (source === OVERALL) {
+      return mat.sources.reduce((sum, s) => sum + ((mat.data[s] && mat.data[s][date]) || 0), 0);
+    }
+    return (mat.data[source] && mat.data[source][date]) || 0;
+  }
+
+  // Default view = Overall only, matching what Mixpanel shows before you add a breakdown
+  const [selectedSources, setSelectedSources] = useState(() => new Set([OVERALL]));
   const [chartType, setChartType] = useState('line');
   const [dateFrom, setDateFrom] = useState(mat.dates[0] || '');
   const [dateTo, setDateTo] = useState(mat.dates[mat.dates.length - 1] || '');
 
   function handleMetricChange(newMetric) {
-    const newMat = matrices[newMetric];
     setMetric(newMetric);
-    setSelectedSources(new Set(newMat.sources.slice(0, 5)));
+    setSelectedSources(new Set([OVERALL]));
   }
 
   function toggleSource(s) {
@@ -43,7 +52,6 @@ export default function DashboardClient({ matrices }) {
     });
   }
 
-  // Global date bounds across all metrics (breakdown view uses this too)
   const allDates = useMemo(() => {
     const set = new Set();
     metricKeys.forEach((k) => matrices[k].dates.forEach((d) => set.add(d)));
@@ -54,12 +62,13 @@ export default function DashboardClient({ matrices }) {
     () => mat.dates.filter((d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo)),
     [mat, dateFrom, dateTo]
   );
-  const sources = mat.sources.filter((s) => selectedSources.has(s));
+  const sourceOptions = [OVERALL, ...mat.sources];
+  const sources = sourceOptions.filter((s) => selectedSources.has(s));
 
   const chartData = useMemo(
     () => dates.map((d) => {
       const row = { date: d.slice(5) };
-      sources.forEach((s) => { row[s] = (mat.data[s] && mat.data[s][d]) || 0; });
+      sources.forEach((s) => { row[s] = valueFor(s, d); });
       return row;
     }),
     [dates, sources, mat]
@@ -68,14 +77,14 @@ export default function DashboardClient({ matrices }) {
   const pieData = useMemo(
     () => sources.map((s) => ({
       name: s,
-      value: dates.reduce((sum, d) => sum + ((mat.data[s] && mat.data[s][d]) || 0), 0),
+      value: dates.reduce((sum, d) => sum + valueFor(s, d), 0),
     })),
     [sources, dates, mat]
   );
 
   const kpis = useMemo(() => {
     if (sources.length === 0 || dates.length === 0) return null;
-    const totals = dates.map((d) => sources.reduce((sum, s) => sum + ((mat.data[s] && mat.data[s][d]) || 0), 0));
+    const totals = dates.map((d) => sources.reduce((sum, s) => sum + valueFor(s, d), 0));
     const grandTotal = totals.reduce((a, b) => a + b, 0);
     const avg = grandTotal / dates.length;
     const peakIdx = totals.indexOf(Math.max(...totals));
@@ -89,21 +98,31 @@ export default function DashboardClient({ matrices }) {
     };
   }, [sources, dates, mat]);
 
-  // Breakdown table: every source as a row, every metric as a column, totalled over the date range
+  // Breakdown table: Overall row first, then every real source, every metric as a column
   const breakdownRows = useMemo(() => {
     const allSources = Array.from(new Set(metricKeys.flatMap((k) => matrices[k].sources)));
-    const rows = allSources.map((source) => {
+    function valueForMetric(metricKey, source, date) {
+      const m = matrices[metricKey];
+      if (source === OVERALL) {
+        return m.sources.reduce((sum, s) => sum + ((m.data[s] && m.data[s][date]) || 0), 0);
+      }
+      return (m.data[source] && m.data[source][date]) || 0;
+    }
+    function rowFor(source) {
       const values = metricKeys.map((k) => {
         const m = matrices[k];
         const rangeDates = m.dates.filter((d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
-        return rangeDates.reduce((sum, d) => sum + ((m.data[source] && m.data[source][d]) || 0), 0);
+        return rangeDates.reduce((sum, d) => sum + valueForMetric(k, source, d), 0);
       });
       return { source, values };
-    });
-    const lastColTotal = rows.reduce((s, r) => s + (r.values[r.values.length - 1] || 0), 0);
+    }
+    const overallRow = rowFor(OVERALL);
+    const rows = allSources.map(rowFor);
+    const lastColTotal = overallRow.values[overallRow.values.length - 1] || 0;
     rows.forEach((r) => { r.share = lastColTotal > 0 ? (r.values[r.values.length - 1] / lastColTotal) * 100 : 0; });
     rows.sort((a, b) => b.values[b.values.length - 1] - a.values[a.values.length - 1]);
-    return rows;
+    overallRow.share = 100;
+    return [overallRow, ...rows];
   }, [matrices, metricKeys, dateFrom, dateTo]);
 
   return (
@@ -170,15 +189,15 @@ export default function DashboardClient({ matrices }) {
           </div>
 
           <div className="flex flex-wrap gap-2 mb-4">
-            {mat.sources.map((s, i) => (
+            {sourceOptions.map((s, i) => (
               <button
                 key={s}
                 onClick={() => toggleSource(s)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition ${
                   selectedSources.has(s) ? 'border-accentDim bg-accent/10 text-text' : 'border-border bg-surface2 text-dim'
-                }`}
+                } ${s === OVERALL ? 'font-medium' : ''}`}
               >
-                <span className="w-2 h-2 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
+                <span className="w-2 h-2 rounded-sm" style={{ background: s === OVERALL ? '#8B96A5' : PALETTE[(i - 1) % PALETTE.length] }} />
                 {s}
               </button>
             ))}
@@ -203,7 +222,7 @@ export default function DashboardClient({ matrices }) {
                       <td className="py-2 px-2 border-b border-border">{d}</td>
                       {sources.map((s) => (
                         <td key={s} className="text-right py-2 px-2 border-b border-border num">
-                          {fmtNum((mat.data[s] && mat.data[s][d]) || 0)}
+                          {fmtNum(valueFor(s, d))}
                         </td>
                       ))}
                     </tr>
@@ -263,9 +282,9 @@ export default function DashboardClient({ matrices }) {
             </thead>
             <tbody>
               {breakdownRows.map((r, i) => (
-                <tr key={r.source}>
+                <tr key={r.source} className={r.source === OVERALL ? 'font-medium' : ''}>
                   <td className="py-2 px-2 border-b border-border flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-sm inline-block" style={{ background: PALETTE[i % PALETTE.length] }} />
+                    <span className="w-2 h-2 rounded-sm inline-block" style={{ background: r.source === OVERALL ? '#8B96A5' : PALETTE[(i - 1) % PALETTE.length] }} />
                     {r.source}
                   </td>
                   {r.values.map((v, j) => (
