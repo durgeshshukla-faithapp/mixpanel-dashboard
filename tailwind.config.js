@@ -1,15 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: ['./app/**/*.{js,jsx}', './components/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
-        bg: '#0F1419',
-        surface: '#161C24',
-        surface2: '#1D2530',
-        border: '#2A323D',
-        text: '#E8ECF1',
-        dim: '#8B96A5',
+        bg: 'var(--bg)',
+        surface: 'var(--surface)',
+        surface2: 'var(--surface2)',
+        border: 'var(--border)',
+        text: 'var(--text)',
+        dim: 'var(--dim)',
         accent: '#3DDC97',
         accentDim: '#2A9D6F',
         warn: '#F0A868',

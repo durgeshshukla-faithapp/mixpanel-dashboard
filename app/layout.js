@@ -1,4 +1,5 @@
 import './globals.css';
+import Providers from '@/components/Providers';
 
 export const metadata = {
   title: 'Mixpanel Dashboards',
@@ -7,8 +8,10 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className="font-sans min-h-screen">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="font-sans min-h-screen">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

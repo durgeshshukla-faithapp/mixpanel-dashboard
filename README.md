@@ -66,8 +66,26 @@ Browser mein `http://localhost:3000` kholo.
 - "All dashboards" list har 60 second mein refresh hoti hai (naya link Sheet mein paste karne ke 1 minute ke andar list mein aa jayega)
 - Har dashboard ka data har 5 minute mein Mixpanel se fresh fetch hota hai automatically
 
-## Access control
+## Naye features (Tags, Theme, Breakdown table)
 
-`Access` sheet mein jo email nahi hai, woh sign-in hi nahi kar payega. `AllowedSources` column mein
-`ALL` likhne se poora data dikhega, ya comma-separated source names (jaise `GE_Meta,Pmax`) se sirf
-woh sources dikhenge.
+### Reports sheet mein "Tag" column add karo
+
+Column C mein har row ke liye ek tag likho (jaise `Marketing`, `Analytics`, `Product`, `Business`).
+Khaali chhod sakte ho agar tag ki zaroorat nahi.
+
+### Access sheet mein "AllowedTags" column add karo
+
+Column C mein likho:
+- `ALL` — sab tags/dashboards dikhenge
+- ya comma-separated tags (jaise `Marketing,Product`) — sirf woh tag wale dashboards dikhenge
+  aur baaki dashboards **poori tarah block** rahenge (link se bhi nahi khulenge)
+
+### Theme toggle
+
+Har page ke top-right mein ☾/☀ button se dark/light switch ho jaata hai, browser mein yaad rehta hai.
+
+### Breakdown table
+
+Har dashboard ke andar "Breakdown" tab — Mixpanel jaisi table: har source ek row, saare metrics
+(Uniques/Events/Revenue) columns mein side-by-side, poore selected date range ka total.
+

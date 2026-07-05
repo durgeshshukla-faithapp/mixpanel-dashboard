@@ -3,9 +3,28 @@
 @tailwind components;
 @tailwind utilities;
 
+:root, .dark {
+  --bg: #0F1419;
+  --surface: #161C24;
+  --surface2: #1D2530;
+  --border: #2A323D;
+  --text: #E8ECF1;
+  --dim: #8B96A5;
+}
+
+.light {
+  --bg: #F7F7F5;
+  --surface: #FFFFFF;
+  --surface2: #F0EFEC;
+  --border: #E1E0D9;
+  --text: #16181C;
+  --dim: #6B7280;
+}
+
 body {
-  background: #0F1419;
-  color: #E8ECF1;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.15s, color 0.15s;
 }
 
 ::-webkit-scrollbar { height: 6px; width: 6px; }

@@ -1,17 +1,19 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getReports } from '@/lib/googleSheets';
+import { getReports, isTagAllowed } from '@/lib/googleSheets';
 import SignInButton from '@/components/SignInButton';
-import DashboardCard from '@/components/DashboardCard';
+import ThemeToggle from '@/components/ThemeToggle';
+import DashboardGrid from '@/components/DashboardGrid';
 
-export const revalidate = 60; // refresh the report list every minute
+export const revalidate = 60;
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="min-h-screen flex items-center justify-center px-4 relative">
+        <div className="absolute top-5 right-5"><ThemeToggle /></div>
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-2">Dashboards</h1>
           <p className="text-dim text-sm mb-6">Sign in with your Google account to continue.</p>
@@ -21,7 +23,10 @@ export default async function HomePage() {
     );
   }
 
-  const reports = await getReports();
+  const allReports = await getReports();
+  const allowedTags = session.allowedTags;
+  const reports = allReports.filter((r) => isTagAllowed(r.tag, allowedTags));
+  const availableTags = Array.from(new Set(allReports.map((r) => r.tag).filter(Boolean)));
 
   return (
     <div className="max-w-5xl mx-auto px-5 py-10">
@@ -32,23 +37,22 @@ export default async function HomePage() {
             {reports.length} connected &middot; signed in as {session.user.email}
           </p>
         </div>
-        <form action="/api/auth/signout" method="post">
-          <button className="text-xs text-dim border border-border rounded-lg px-3 py-2 hover:text-text hover:border-accentDim transition">
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <form action="/api/auth/signout" method="post">
+            <button className="text-xs text-dim border border-border rounded-lg px-3 py-2 hover:text-text hover:border-accentDim transition">
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
 
       {reports.length === 0 ? (
         <p className="text-dim text-sm">
-          No dashboards yet. Paste a Mixpanel link into the Reports sheet to create one.
+          No dashboards available for your account yet.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {reports.map((r) => (
-            <DashboardCard key={r.row} row={r.row} name={r.name} />
-          ))}
-        </div>
+        <DashboardGrid reports={reports} availableTags={availableTags} />
       )}
     </div>
   );

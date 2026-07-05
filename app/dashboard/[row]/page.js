@@ -1,8 +1,9 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getReportByRow, getAllowedSourcesForEmail } from '@/lib/googleSheets';
+import { getReportByRow, getAllowedSourcesForEmail, isTagAllowed } from '@/lib/googleSheets';
 import { extractReportId, fetchMixpanelReport, buildAllMatrices, filterMatricesBySources } from '@/lib/mixpanel';
 import DashboardClient from '@/components/DashboardClient';
+import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 
 export const revalidate = 300; // re-fetch Mixpanel data at most every 5 minutes
@@ -22,6 +23,15 @@ export default async function DashboardPage({ params }) {
     return (
       <div className="min-h-screen flex items-center justify-center text-dim text-sm">
         Dashboard not found.
+      </div>
+    );
+  }
+
+  // Full block: if this dashboard's tag isn't in the user's allowed tags, deny entirely
+  if (!isTagAllowed(report.tag, session.allowedTags)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-dim text-sm px-4 text-center">
+        You don&apos;t have access to this dashboard.
       </div>
     );
   }
@@ -51,9 +61,12 @@ export default async function DashboardPage({ params }) {
 
   return (
     <div className="max-w-5xl mx-auto px-5 py-10">
-      <Link href="/" className="text-xs text-dim hover:text-accent inline-flex items-center gap-1 mb-4">
-        &larr; Dashboards
-      </Link>
+      <div className="flex justify-between items-center mb-4">
+        <Link href="/" className="text-xs text-dim hover:text-accent inline-flex items-center gap-1">
+          &larr; Dashboards
+        </Link>
+        <ThemeToggle />
+      </div>
       <h1 className="text-xl font-semibold mb-6 tracking-tight">{report.name}</h1>
       <DashboardClient matrices={matrices} />
     </div>

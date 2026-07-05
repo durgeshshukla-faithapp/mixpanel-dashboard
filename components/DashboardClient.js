@@ -13,9 +13,15 @@ function fmtNum(n) {
   return Math.round(n).toLocaleString();
 }
 
+// Shortens long Mixpanel metric names like "C. Sum of value on register_succeed" -> "Sum of value"
+function shortMetricName(name) {
+  return name.replace(/^[A-Z]\.\s*/, '').replace(/\s+on\s+\w+$/i, '');
+}
+
 export default function DashboardClient({ matrices }) {
-  const metrics = Object.keys(matrices);
-  const [metric, setMetric] = useState(metrics[0] || '');
+  const metricKeys = Object.keys(matrices);
+  const [view, setView] = useState('trend'); // 'trend' | 'breakdown'
+  const [metric, setMetric] = useState(metricKeys[0] || '');
   const mat = matrices[metric] || { sources: [], dates: [], data: {} };
 
   const [selectedSources, setSelectedSources] = useState(() => new Set(mat.sources.slice(0, 5)));
@@ -27,8 +33,6 @@ export default function DashboardClient({ matrices }) {
     const newMat = matrices[newMetric];
     setMetric(newMetric);
     setSelectedSources(new Set(newMat.sources.slice(0, 5)));
-    setDateFrom(newMat.dates[0] || '');
-    setDateTo(newMat.dates[newMat.dates.length - 1] || '');
   }
 
   function toggleSource(s) {
@@ -38,6 +42,13 @@ export default function DashboardClient({ matrices }) {
       return next;
     });
   }
+
+  // Global date bounds across all metrics (breakdown view uses this too)
+  const allDates = useMemo(() => {
+    const set = new Set();
+    metricKeys.forEach((k) => matrices[k].dates.forEach((d) => set.add(d)));
+    return Array.from(set).sort();
+  }, [matrices, metricKeys]);
 
   const dates = useMemo(
     () => mat.dates.filter((d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo)),
@@ -72,20 +83,62 @@ export default function DashboardClient({ matrices }) {
     const last7 = totals.slice(-7).reduce((a, b) => a + b, 0);
     const prev7 = totals.slice(-14, -7).reduce((a, b) => a + b, 0);
     const wow = prev7 > 0 ? ((last7 - prev7) / prev7) * 100 : null;
-    const sourceTotals = sources
-      .map((s) => ({ source: s, total: dates.reduce((sum, d) => sum + ((mat.data[s] && mat.data[s][d]) || 0), 0) }))
-      .sort((a, b) => b.total - a.total);
-
     return {
       total: grandTotal, avg, peak: { date: dates[peakIdx], value: totals[peakIdx] },
-      low: { date: dates[lowIdx], value: totals[lowIdx] }, wow, topSource: sourceTotals[0],
+      low: { date: dates[lowIdx], value: totals[lowIdx] }, wow,
     };
   }, [sources, dates, mat]);
 
+  // Breakdown table: every source as a row, every metric as a column, totalled over the date range
+  const breakdownRows = useMemo(() => {
+    const allSources = Array.from(new Set(metricKeys.flatMap((k) => matrices[k].sources)));
+    const rows = allSources.map((source) => {
+      const values = metricKeys.map((k) => {
+        const m = matrices[k];
+        const rangeDates = m.dates.filter((d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+        return rangeDates.reduce((sum, d) => sum + ((m.data[source] && m.data[source][d]) || 0), 0);
+      });
+      return { source, values };
+    });
+    const lastColTotal = rows.reduce((s, r) => s + (r.values[r.values.length - 1] || 0), 0);
+    rows.forEach((r) => { r.share = lastColTotal > 0 ? (r.values[r.values.length - 1] / lastColTotal) * 100 : 0; });
+    rows.sort((a, b) => b.values[b.values.length - 1] - a.values[a.values.length - 1]);
+    return rows;
+  }, [matrices, metricKeys, dateFrom, dateTo]);
+
   return (
     <div>
-      {/* KPI row */}
-      {kpis && (
+      {/* View tabs */}
+      <div className="flex gap-1 mb-5 border-b border-border">
+        {[['trend', 'Trend'], ['breakdown', 'Breakdown']].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`text-sm px-4 py-2 border-b-2 transition ${
+              view === key ? 'border-accent text-text font-medium' : 'border-transparent text-dim'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <div className="flex-1" />
+        <div className="flex items-center gap-2 pb-2">
+          <input
+            type="date" value={dateFrom} min={allDates[0]} max={allDates[allDates.length - 1]}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="bg-surface2 border border-border rounded-lg px-2 py-1.5 text-xs"
+          />
+          <span className="text-xs text-dim">to</span>
+          <input
+            type="date" value={dateTo} min={allDates[0]} max={allDates[allDates.length - 1]}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="bg-surface2 border border-border rounded-lg px-2 py-1.5 text-xs"
+          />
+        </div>
+      </div>
+
+      {/* KPI row (Trend view only, tied to selected metric/sources) */}
+      {view === 'trend' && kpis && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
           <Kpi label="Total" value={fmtNum(kpis.total)} delta={kpis.wow} />
           <Kpi label="Daily avg" value={fmtNum(kpis.avg)} />
@@ -94,138 +147,135 @@ export default function DashboardClient({ matrices }) {
         </div>
       )}
 
-      {/* Controls panel */}
-      <div className="border border-border bg-surface rounded-2xl p-5 mb-5">
-        <div className="flex flex-wrap gap-2 mb-4">
-          <select
-            value={metric}
-            onChange={(e) => handleMetricChange(e.target.value)}
-            className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
-          >
-            {metrics.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <select
-            value={chartType}
-            onChange={(e) => setChartType(e.target.value)}
-            className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
-          >
-            <option value="line">Line</option>
-            <option value="bar">Bar</option>
-            <option value="pie">Pie (totals)</option>
-            <option value="table">Table</option>
-          </select>
-          <input
-            type="date" value={dateFrom} min={mat.dates[0]} max={mat.dates[mat.dates.length - 1]}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
-          />
-          <span className="self-center text-xs text-dim">to</span>
-          <input
-            type="date" value={dateTo} min={mat.dates[0]} max={mat.dates[mat.dates.length - 1]}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
-          />
-        </div>
-
-        {/* Source chips */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {mat.sources.map((s, i) => (
-            <button
-              key={s}
-              onClick={() => toggleSource(s)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition ${
-                selectedSources.has(s)
-                  ? 'border-accentDim bg-accent/10 text-text'
-                  : 'border-border bg-surface2 text-dim'
-              }`}
+      {view === 'trend' ? (
+        <div className="border border-border bg-surface rounded-2xl p-5">
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select
+              value={metric}
+              onChange={(e) => handleMetricChange(e.target.value)}
+              className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
             >
-              <span className="w-2 h-2 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
-              {s}
-            </button>
-          ))}
-        </div>
+              {metricKeys.map((m) => <option key={m} value={m}>{shortMetricName(m)}</option>)}
+            </select>
+            <select
+              value={chartType}
+              onChange={(e) => setChartType(e.target.value)}
+              className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
+            >
+              <option value="line">Line</option>
+              <option value="bar">Bar</option>
+              <option value="pie">Pie (totals)</option>
+              <option value="table">Table</option>
+            </select>
+          </div>
 
-        {/* Chart / table */}
-        {sources.length === 0 ? (
-          <p className="text-dim text-sm py-10 text-center">Select at least one source.</p>
-        ) : chartType === 'table' ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">Date</th>
-                  {sources.map((s) => (
-                    <th key={s} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">{s}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dates.map((d) => (
-                  <tr key={d}>
-                    <td className="py-2 px-2 border-b border-border">{d}</td>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {mat.sources.map((s, i) => (
+              <button
+                key={s}
+                onClick={() => toggleSource(s)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition ${
+                  selectedSources.has(s) ? 'border-accentDim bg-accent/10 text-text' : 'border-border bg-surface2 text-dim'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {sources.length === 0 ? (
+            <p className="text-dim text-sm py-10 text-center">Select at least one source.</p>
+          ) : chartType === 'table' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr>
+                    <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">Date</th>
                     {sources.map((s) => (
-                      <td key={s} className="text-right py-2 px-2 border-b border-border num">
-                        {fmtNum((mat.data[s] && mat.data[s][d]) || 0)}
-                      </td>
+                      <th key={s} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">{s}</th>
                     ))}
                   </tr>
+                </thead>
+                <tbody>
+                  {dates.map((d) => (
+                    <tr key={d}>
+                      <td className="py-2 px-2 border-b border-border">{d}</td>
+                      {sources.map((s) => (
+                        <td key={s} className="text-right py-2 px-2 border-b border-border num">
+                          {fmtNum((mat.data[s] && mat.data[s][d]) || 0)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : chartType === 'pie' ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110}>
+                  {pieData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              {chartType === 'bar' ? (
+                <BarChart data={chartData}>
+                  <CartesianGrid stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'var(--dim)', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
+                  {sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} />)}
+                </BarChart>
+              ) : (
+                <LineChart data={chartData}>
+                  <CartesianGrid stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'var(--dim)', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
+                  {sources.map((s, i) => (
+                    <Line key={s} type="monotone" dataKey={s} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
+                  ))}
+                </LineChart>
+              )}
+            </ResponsiveContainer>
+          )}
+        </div>
+      ) : (
+        <div className="border border-border bg-surface rounded-2xl p-5 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">Source</th>
+                {metricKeys.map((k) => (
+                  <th key={k} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">
+                    {shortMetricName(k)}
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        ) : chartType === 'pie' ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110}>
-                {pieData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#1D2530', border: '1px solid #2A323D', borderRadius: 8 }} />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#8B96A5' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            {chartType === 'bar' ? (
-              <BarChart data={chartData}>
-                <CartesianGrid stroke="#2A323D" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: '#8B96A5', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#8B96A5', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#1D2530', border: '1px solid #2A323D', borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#8B96A5' }} />
-                {sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} />)}
-              </BarChart>
-            ) : (
-              <LineChart data={chartData}>
-                <CartesianGrid stroke="#2A323D" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: '#8B96A5', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#8B96A5', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#1D2530', border: '1px solid #2A323D', borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#8B96A5' }} />
-                {sources.map((s, i) => (
-                  <Line key={s} type="monotone" dataKey={s} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
-                ))}
-              </LineChart>
-            )}
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Insights panel */}
-      {kpis && (
-        <div className="border border-border bg-surface rounded-2xl p-5">
-          <h2 className="text-xs font-semibold text-dim uppercase tracking-wide mb-3">Key points</h2>
-          <ul className="text-sm space-y-2">
-            <InsightRow>Peak day: <span className="num">{kpis.peak.date}</span> ({fmtNum(kpis.peak.value)})</InsightRow>
-            <InsightRow>Lowest day: <span className="num">{kpis.low.date}</span> ({fmtNum(kpis.low.value)})</InsightRow>
-            {kpis.wow !== null && (
-              <InsightRow>
-                Last 7 days vs previous 7: {kpis.wow >= 0 ? '+' : ''}{kpis.wow.toFixed(1)}%
-              </InsightRow>
-            )}
-            {kpis.topSource && (
-              <InsightRow>Top selected source: {kpis.topSource.source} ({fmtNum(kpis.topSource.total)})</InsightRow>
-            )}
-          </ul>
+                <th className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">Share %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdownRows.map((r, i) => (
+                <tr key={r.source}>
+                  <td className="py-2 px-2 border-b border-border flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-sm inline-block" style={{ background: PALETTE[i % PALETTE.length] }} />
+                    {r.source}
+                  </td>
+                  {r.values.map((v, j) => (
+                    <td key={j} className="text-right py-2 px-2 border-b border-border num">{fmtNum(v)}</td>
+                  ))}
+                  <td className="text-right py-2 px-2 border-b border-border num text-accent">{r.share.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -244,14 +294,5 @@ function Kpi({ label, value, delta, sub }) {
         </div>
       )}
     </div>
-  );
-}
-
-function InsightRow({ children }) {
-  return (
-    <li className="flex gap-2 pb-2 border-b border-border last:border-0">
-      <span className="text-accent num">&rarr;</span>
-      <span>{children}</span>
-    </li>
   );
 }
