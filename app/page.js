@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getReports, isTagAllowed } from '@/lib/googleSheets';
+import { getReports, getPostgresQueries, isTagAllowed } from '@/lib/googleSheets';
 import SignInButton from '@/components/SignInButton';
 import ThemeToggle from '@/components/ThemeToggle';
 import DashboardGrid from '@/components/DashboardGrid';
@@ -24,10 +24,23 @@ export default async function HomePage() {
     );
   }
 
-  const allReports = await getReports();
   const allowedTags = session.allowedTags;
+
+  const allReports = await getReports();
   const reports = allReports.filter((r) => isTagAllowed(r.tag, allowedTags));
-  const availableTags = Array.from(new Set(allReports.map((r) => r.tag).filter(Boolean)));
+  const mixpanelTags = Array.from(new Set(allReports.map((r) => r.tag).filter(Boolean)));
+
+  // Postgres queries live in a completely separate sheet tab and are never
+  // merged with Mixpanel data - shown as their own section.
+  let pgQueries = [];
+  let pgTags = [];
+  try {
+    const allPg = await getPostgresQueries();
+    pgQueries = allPg.filter((q) => isTagAllowed(q.tag, allowedTags));
+    pgTags = Array.from(new Set(allPg.map((q) => q.tag).filter(Boolean)));
+  } catch (err) {
+    // PostgresQueries sheet tab may not exist yet - that's fine, just show nothing here
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-5 py-10">
@@ -35,7 +48,7 @@ export default async function HomePage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Dashboards</h1>
           <p className="text-dim text-xs mt-1">
-            {reports.length} connected &middot; signed in as {session.user.email}
+            {reports.length + pgQueries.length} connected &middot; signed in as {session.user.email}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -48,13 +61,26 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {reports.length === 0 ? (
+      {reports.length === 0 && pgQueries.length === 0 ? (
         <div className="text-dim text-sm">
           <p className="mb-2">No dashboards available for your account yet.</p>
           <RequestAccess dashboardName="access" />
         </div>
       ) : (
-        <DashboardGrid reports={reports} availableTags={availableTags} />
+        <div className="space-y-10">
+          {reports.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold text-dim uppercase tracking-wide mb-3">Mixpanel Dashboards</h2>
+              <DashboardGrid reports={reports} availableTags={mixpanelTags} hrefPrefix="/dashboard" subtitle="Live from Mixpanel" />
+            </section>
+          )}
+          {pgQueries.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold text-dim uppercase tracking-wide mb-3">Postgres Dashboards</h2>
+              <DashboardGrid reports={pgQueries} availableTags={pgTags} hrefPrefix="/postgres" subtitle="Live from Postgres" />
+            </section>
+          )}
+        </div>
       )}
     </div>
   );

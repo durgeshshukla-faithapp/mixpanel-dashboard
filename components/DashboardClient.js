@@ -1,5 +1,6 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -7,6 +8,7 @@ import {
 
 const PALETTE = ['#3DDC97', '#5B9FE8', '#F0A868', '#C58FE0', '#F0685C', '#4FD1D9', '#E8C15B', '#8B96A5'];
 const OVERALL = 'Overall';
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function fmtNum(n) {
   if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(2) + 'M';
@@ -14,13 +16,10 @@ function fmtNum(n) {
   return Math.round(n).toLocaleString();
 }
 
-// Shortens long Mixpanel metric names like "C. Sum of value on register_succeed" -> "Sum of value"
-// and "A. Uniques of register_succeed" -> "Uniques"
 function shortMetricName(name) {
   return name.replace(/^[A-Z]\.\s*/, '').replace(/\s+(of|on)\s+\S+$/i, '');
 }
 
-// Formats "2025-07-10" -> "Jul 10, 2025" to match Mixpanel's date style
 function fmtDate(iso) {
   const d = new Date(iso + 'T00:00:00');
   if (isNaN(d.getTime())) return iso;
@@ -28,13 +27,17 @@ function fmtDate(iso) {
 }
 
 export default function DashboardClient({ matrices }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const metricKeys = Object.keys(matrices);
-  const [view, setView] = useState('trend'); // 'trend' | 'table' | 'breakdown'
+
+  // Initialize state from URL (shareable filter links) or sensible defaults
+  const [view, setView] = useState(searchParams.get('view') || 'trend');
   const [tableSearch, setTableSearch] = useState('');
-  const [metric, setMetric] = useState(metricKeys[0] || '');
+  const [metric, setMetric] = useState(searchParams.get('metric') || metricKeys[0] || '');
   const mat = matrices[metric] || { sources: [], dates: [], data: {} };
 
-  // Value lookup that understands the synthetic "Overall" source (sum of every real source)
   function valueFor(source, date) {
     if (source === OVERALL) {
       return mat.sources.reduce((sum, s) => sum + ((mat.data[s] && mat.data[s][date]) || 0), 0);
@@ -42,11 +45,32 @@ export default function DashboardClient({ matrices }) {
     return (mat.data[source] && mat.data[source][date]) || 0;
   }
 
-  // Default view = Overall only, matching what Mixpanel shows before you add a breakdown
-  const [selectedSources, setSelectedSources] = useState(() => new Set([OVERALL]));
-  const [chartType, setChartType] = useState('line');
-  const [dateFrom, setDateFrom] = useState(mat.dates[0] || '');
-  const [dateTo, setDateTo] = useState(mat.dates[mat.dates.length - 1] || '');
+  const urlSources = searchParams.get('sources');
+  const [selectedSources, setSelectedSources] = useState(() =>
+    urlSources ? new Set(urlSources.split(',')) : new Set([OVERALL])
+  );
+  const [chartType, setChartType] = useState(searchParams.get('chart') || 'line');
+  const [dateFrom, setDateFrom] = useState(searchParams.get('from') || mat.dates[0] || '');
+  const [dateTo, setDateTo] = useState(searchParams.get('to') || mat.dates[mat.dates.length - 1] || '');
+  const [showMovingAvg, setShowMovingAvg] = useState(searchParams.get('ma') === '1');
+  const [comparePrevious, setComparePrevious] = useState(searchParams.get('cmp') === '1');
+  const [cumulative, setCumulative] = useState(searchParams.get('cum') === '1');
+
+  // Keep the URL in sync so the current view can be shared as a link
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set('view', view);
+    params.set('metric', metric);
+    params.set('sources', Array.from(selectedSources).join(','));
+    params.set('chart', chartType);
+    if (dateFrom) params.set('from', dateFrom);
+    if (dateTo) params.set('to', dateTo);
+    if (showMovingAvg) params.set('ma', '1');
+    if (comparePrevious) params.set('cmp', '1');
+    if (cumulative) params.set('cum', '1');
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, metric, selectedSources, chartType, dateFrom, dateTo, showMovingAvg, comparePrevious, cumulative]);
 
   function handleMetricChange(newMetric) {
     setMetric(newMetric);
@@ -59,6 +83,10 @@ export default function DashboardClient({ matrices }) {
       next.has(s) ? next.delete(s) : next.add(s);
       return next;
     });
+  }
+
+  function copyShareLink() {
+    navigator.clipboard.writeText(window.location.href);
   }
 
   const allDates = useMemo(() => {
@@ -74,38 +102,100 @@ export default function DashboardClient({ matrices }) {
   const sourceOptions = [OVERALL, ...mat.sources];
   const sources = sourceOptions.filter((s) => selectedSources.has(s));
 
-  const chartData = useMemo(
-    () => dates.map((d) => {
-      const row = { date: d.slice(5) };
-      sources.forEach((s) => { row[s] = valueFor(s, d); });
-      return row;
-    }),
+  // Combined total per day across selected sources - basis for moving avg / compare / cumulative
+  const dailyTotals = useMemo(
+    () => dates.map((d) => sources.reduce((sum, s) => sum + valueFor(s, d), 0)),
     [dates, sources, mat]
   );
 
+  const movingAvgSeries = useMemo(() => {
+    const window = 7;
+    return dailyTotals.map((_, i) => {
+      const start = Math.max(0, i - window + 1);
+      const slice = dailyTotals.slice(start, i + 1);
+      return slice.reduce((a, b) => a + b, 0) / slice.length;
+    });
+  }, [dailyTotals]);
+
+  const previousPeriodSeries = useMemo(() => {
+    const n = dates.length;
+    if (n === 0) return [];
+    const firstIdx = allDates.indexOf(dates[0]);
+    if (firstIdx < n) return dates.map(() => null); // not enough history to compare
+    const prevDates = allDates.slice(firstIdx - n, firstIdx);
+    return prevDates.map((d) => sources.reduce((sum, s) => sum + valueFor(s, d), 0));
+  }, [dates, sources, allDates, mat]);
+
+  const chartData = useMemo(() => {
+    let running = 0;
+    return dates.map((d, i) => {
+      const row = { date: d.slice(5) };
+      sources.forEach((s) => { row[s] = valueFor(s, d); });
+      if (cumulative) {
+        running += dailyTotals[i];
+        row.__cumulative = running;
+      }
+      if (showMovingAvg) row.__movingAvg = movingAvgSeries[i];
+      if (comparePrevious) row.__previous = previousPeriodSeries[i];
+      return row;
+    });
+  }, [dates, sources, mat, cumulative, showMovingAvg, comparePrevious, dailyTotals, movingAvgSeries, previousPeriodSeries]);
+
   const pieData = useMemo(
-    () => sources.map((s) => ({
-      name: s,
-      value: dates.reduce((sum, d) => sum + valueFor(s, d), 0),
-    })),
+    () => sources.map((s) => ({ name: s, value: dates.reduce((sum, d) => sum + valueFor(s, d), 0) })),
     [sources, dates, mat]
   );
 
+  // KPIs + statistical anomaly detection (flags days beyond 2 standard deviations)
   const kpis = useMemo(() => {
     if (sources.length === 0 || dates.length === 0) return null;
-    const totals = dates.map((d) => sources.reduce((sum, s) => sum + valueFor(s, d), 0));
+    const totals = dailyTotals;
     const grandTotal = totals.reduce((a, b) => a + b, 0);
     const avg = grandTotal / dates.length;
+    const variance = totals.reduce((s, v) => s + (v - avg) ** 2, 0) / totals.length;
+    const stddev = Math.sqrt(variance);
     const peakIdx = totals.indexOf(Math.max(...totals));
     const lowIdx = totals.indexOf(Math.min(...totals));
     const last7 = totals.slice(-7).reduce((a, b) => a + b, 0);
     const prev7 = totals.slice(-14, -7).reduce((a, b) => a + b, 0);
     const wow = prev7 > 0 ? ((last7 - prev7) / prev7) * 100 : null;
+    const anomalies = dates
+      .map((d, i) => ({ date: d, value: totals[i], z: stddev > 0 ? (totals[i] - avg) / stddev : 0 }))
+      .filter((r) => Math.abs(r.z) >= 2)
+      .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+      .slice(0, 3);
     return {
       total: grandTotal, avg, peak: { date: dates[peakIdx], value: totals[peakIdx] },
-      low: { date: dates[lowIdx], value: totals[lowIdx] }, wow,
+      low: { date: dates[lowIdx], value: totals[lowIdx] }, wow, anomalies,
     };
-  }, [sources, dates, mat]);
+  }, [sources, dates, dailyTotals]);
+
+  // Day-of-week pattern (based on Overall across the selected range)
+  const weekdayPattern = useMemo(() => {
+    const buckets = WEEKDAYS.map(() => ({ sum: 0, count: 0 }));
+    dates.forEach((d) => {
+      const day = new Date(d + 'T00:00:00').getDay();
+      buckets[day].sum += valueFor(OVERALL, d);
+      buckets[day].count += 1;
+    });
+    return WEEKDAYS.map((label, i) => ({
+      label,
+      avg: buckets[i].count > 0 ? buckets[i].sum / buckets[i].count : 0,
+    }));
+  }, [dates, mat]);
+  const weekdayMax = Math.max(...weekdayPattern.map((w) => w.avg), 1);
+
+  // Funnel: total per metric over the selected range (Overall), with stage-to-stage conversion %
+  const funnelStages = useMemo(() => {
+    return metricKeys.map((k) => {
+      const m = matrices[k];
+      const rangeDates = m.dates.filter((d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+      const total = rangeDates.reduce(
+        (sum, d) => sum + m.sources.reduce((s2, src) => s2 + ((m.data[src] && m.data[src][d]) || 0), 0), 0
+      );
+      return { metric: k, label: shortMetricName(k), total };
+    });
+  }, [matrices, metricKeys, dateFrom, dateTo]);
 
   // Breakdown table: Overall row first, then every real source, every metric as a column
   const breakdownRows = useMemo(() => {
@@ -134,7 +224,7 @@ export default function DashboardClient({ matrices }) {
     return [overallRow, ...rows];
   }, [matrices, metricKeys, dateFrom, dateTo]);
 
-  // Detailed table: one row per (source, date), all metrics side by side - mirrors Mixpanel's own table exactly
+  // Detailed table: one row per (source, date), all metrics side by side
   const detailedRows = useMemo(() => {
     const allSources = Array.from(new Set(metricKeys.flatMap((k) => matrices[k].sources)));
     const rows = [];
@@ -156,9 +246,7 @@ export default function DashboardClient({ matrices }) {
   function downloadCsv() {
     const headers = ['Source', 'Date', ...metricKeys.map(shortMetricName)];
     const lines = [headers.join(',')];
-    detailedRows.rows.forEach((r) => {
-      lines.push([r.source, r.date, ...r.values].join(','));
-    });
+    detailedRows.rows.forEach((r) => lines.push([r.source, r.date, ...r.values].join(',')));
     lines.push(['Overall', '', ...detailedRows.overallValues].join(','));
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -170,9 +258,8 @@ export default function DashboardClient({ matrices }) {
 
   return (
     <div>
-      {/* View tabs */}
-      <div className="flex gap-1 mb-5 border-b border-border">
-        {[['trend', 'Trend'], ['table', 'Table'], ['breakdown', 'Breakdown']].map(([key, label]) => (
+      <div className="flex flex-wrap gap-1 mb-5 border-b border-border items-center">
+        {[['trend', 'Trend'], ['table', 'Table'], ['breakdown', 'Breakdown'], ['funnel', 'Funnel']].map(([key, label]) => (
           <button
             key={key}
             onClick={() => setView(key)}
@@ -184,7 +271,14 @@ export default function DashboardClient({ matrices }) {
           </button>
         ))}
         <div className="flex-1" />
-        <div className="flex items-center gap-2 pb-2">
+        <button
+          onClick={copyShareLink}
+          className="text-xs px-3 py-1.5 mb-2 rounded-lg border border-border bg-surface2 hover:border-accentDim transition"
+          title="Copy a link to this exact view"
+        >
+          Copy link
+        </button>
+        <div className="flex items-center gap-2 pb-2 ml-2">
           <input
             type="date" value={dateFrom} min={allDates[0]} max={allDates[allDates.length - 1]}
             onChange={(e) => setDateFrom(e.target.value)}
@@ -199,7 +293,6 @@ export default function DashboardClient({ matrices }) {
         </div>
       </div>
 
-      {/* KPI row (Trend view only, tied to selected metric/sources) */}
       {view === 'trend' && kpis && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
           <Kpi label="Total" value={fmtNum(kpis.total)} delta={kpis.wow} />
@@ -227,8 +320,19 @@ export default function DashboardClient({ matrices }) {
               <option value="line">Line</option>
               <option value="bar">Bar</option>
               <option value="pie">Pie (totals)</option>
-              <option value="table">Table</option>
             </select>
+            <label className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 cursor-pointer">
+              <input type="checkbox" checked={showMovingAvg} onChange={(e) => setShowMovingAvg(e.target.checked)} />
+              7-day avg
+            </label>
+            <label className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 cursor-pointer">
+              <input type="checkbox" checked={comparePrevious} onChange={(e) => setComparePrevious(e.target.checked)} />
+              Compare to previous period
+            </label>
+            <label className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 cursor-pointer">
+              <input type="checkbox" checked={cumulative} onChange={(e) => setCumulative(e.target.checked)} />
+              Cumulative
+            </label>
           </div>
 
           <div className="flex flex-wrap gap-2 mb-4">
@@ -248,31 +352,6 @@ export default function DashboardClient({ matrices }) {
 
           {sources.length === 0 ? (
             <p className="text-dim text-sm py-10 text-center">Select at least one source.</p>
-          ) : chartType === 'table' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr>
-                    <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">Date</th>
-                    {sources.map((s) => (
-                      <th key={s} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border">{s}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {dates.map((d) => (
-                    <tr key={d}>
-                      <td className="py-2 px-2 border-b border-border">{d}</td>
-                      {sources.map((s) => (
-                        <td key={s} className="text-right py-2 px-2 border-b border-border num">
-                          {fmtNum(valueFor(s, d))}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           ) : chartType === 'pie' ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
@@ -292,7 +371,10 @@ export default function DashboardClient({ matrices }) {
                   <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
                   <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
                   <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
-                  {sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} />)}
+                  {!cumulative && sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} />)}
+                  {cumulative && <Bar dataKey="__cumulative" name="Cumulative" fill={PALETTE[0]} />}
+                  {showMovingAvg && !cumulative && <Line type="monotone" dataKey="__movingAvg" name="7-day avg" stroke="#8B96A5" strokeDasharray="4 3" dot={false} />}
+                  {comparePrevious && !cumulative && <Line type="monotone" dataKey="__previous" name="Previous period" stroke="#F0A868" strokeDasharray="4 3" dot={false} />}
                 </BarChart>
               ) : (
                 <LineChart data={chartData}>
@@ -301,13 +383,36 @@ export default function DashboardClient({ matrices }) {
                   <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
                   <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
                   <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
-                  {sources.map((s, i) => (
+                  {!cumulative && sources.map((s, i) => (
                     <Line key={s} type="monotone" dataKey={s} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
                   ))}
+                  {cumulative && <Line type="monotone" dataKey="__cumulative" name="Cumulative" stroke={PALETTE[0]} strokeWidth={2} dot={false} />}
+                  {showMovingAvg && !cumulative && <Line type="monotone" dataKey="__movingAvg" name="7-day avg" stroke="#8B96A5" strokeWidth={2} strokeDasharray="4 3" dot={false} />}
+                  {comparePrevious && !cumulative && <Line type="monotone" dataKey="__previous" name="Previous period" stroke="#F0A868" strokeWidth={2} strokeDasharray="4 3" dot={false} />}
                 </LineChart>
               )}
             </ResponsiveContainer>
           )}
+
+          {/* Day-of-week pattern strip */}
+          <div className="mt-6 pt-5 border-t border-border">
+            <h3 className="text-[11px] text-dim uppercase tracking-wide mb-3">Day-of-week pattern (Overall)</h3>
+            <div className="grid grid-cols-7 gap-2">
+              {weekdayPattern.map((w) => (
+                <div key={w.label} className="text-center">
+                  <div
+                    className="rounded-lg mb-1"
+                    style={{
+                      height: 40,
+                      background: `rgba(61,220,151,${0.15 + 0.7 * (w.avg / weekdayMax)})`,
+                    }}
+                    title={fmtNum(w.avg)}
+                  />
+                  <div className="text-[10px] text-dim">{w.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       ) : view === 'table' ? (
         <div className="border border-border bg-surface rounded-2xl p-5">
@@ -368,7 +473,7 @@ export default function DashboardClient({ matrices }) {
             </table>
           </div>
         </div>
-      ) : (
+      ) : view === 'breakdown' ? (
         <div className="border border-border bg-surface rounded-2xl p-5 overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -397,6 +502,64 @@ export default function DashboardClient({ matrices }) {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="border border-border bg-surface rounded-2xl p-5">
+          <h3 className="text-[11px] text-dim uppercase tracking-wide mb-4">
+            Funnel across metrics (Overall, selected date range)
+          </h3>
+          <div className="space-y-3">
+            {funnelStages.map((stage, i) => {
+              const pctOfFirst = funnelStages[0].total > 0 ? (stage.total / funnelStages[0].total) * 100 : 0;
+              const convFromPrev = i > 0 && funnelStages[i - 1].total > 0
+                ? (stage.total / funnelStages[i - 1].total) * 100 : null;
+              return (
+                <div key={stage.metric}>
+                  <div className="flex justify-between items-baseline mb-1 text-xs">
+                    <span>{stage.label}</span>
+                    <span className="text-dim num">
+                      {fmtNum(stage.total)}
+                      {convFromPrev !== null && <span className="ml-2 text-accent">{convFromPrev.toFixed(1)}% of prev stage</span>}
+                    </span>
+                  </div>
+                  <div className="h-6 bg-surface2 rounded-lg overflow-hidden">
+                    <div
+                      className="h-full rounded-lg"
+                      style={{ width: `${Math.max(pctOfFirst, 2)}%`, background: PALETTE[i % PALETTE.length] }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {view === 'trend' && kpis && (
+        <div className="border border-border bg-surface rounded-2xl p-5 mt-5">
+          <h2 className="text-xs font-semibold text-dim uppercase tracking-wide mb-3">Key points</h2>
+          <ul className="text-sm space-y-2">
+            <li className="flex gap-2 pb-2 border-b border-border">
+              <span className="text-accent num">&rarr;</span>
+              Peak day: <span className="num">{kpis.peak.date}</span> ({fmtNum(kpis.peak.value)})
+            </li>
+            <li className="flex gap-2 pb-2 border-b border-border">
+              <span className="text-accent num">&rarr;</span>
+              Lowest day: <span className="num">{kpis.low.date}</span> ({fmtNum(kpis.low.value)})
+            </li>
+            {kpis.wow !== null && (
+              <li className="flex gap-2 pb-2 border-b border-border">
+                <span className="text-accent num">&rarr;</span>
+                Last 7 days vs previous 7: {kpis.wow >= 0 ? '+' : ''}{kpis.wow.toFixed(1)}%
+              </li>
+            )}
+            {kpis.anomalies.length > 0 && kpis.anomalies.map((a) => (
+              <li key={a.date} className="flex gap-2 pb-2 border-b border-border last:border-0">
+                <span className="text-warn num">&rarr;</span>
+                Unusual day: <span className="num">{a.date}</span> ({fmtNum(a.value)}, {a.z >= 0 ? 'above' : 'below'} normal range)
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

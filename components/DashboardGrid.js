@@ -15,7 +15,7 @@ export function tagColor(tag) {
   return TAG_COLORS[(tag || '').toLowerCase()] || DEFAULT_TAG_COLOR;
 }
 
-export default function DashboardGrid({ reports, availableTags }) {
+export default function DashboardGrid({ reports, availableTags, hrefPrefix = '/dashboard', subtitle }) {
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState('All');
 
@@ -60,7 +60,9 @@ export default function DashboardGrid({ reports, availableTags }) {
         <p className="text-dim text-sm">No dashboards match.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {filtered.map((r) => <DashboardCard key={r.row} row={r.row} name={r.name} tag={r.tag} />)}
+          {filtered.map((r) => (
+            <DashboardCard key={r.row} row={r.row} name={r.name} tag={r.tag} hrefPrefix={hrefPrefix} subtitle={subtitle} />
+          ))}
         </div>
       )}
     </div>

@@ -117,3 +117,23 @@ Abhi sirf Mixpanel se data aata hai. Future mein Postgres (ya koi aur source) ad
    (same date keys use karke)
 3. `DashboardClient` ko koi change nahi karna padega — woh sirf iss shape ko samajhta hai,
    data kahan se aaya usse farak nahi padta
+
+## Postgres Dashboards (SSH tunnel)
+
+Ek naya Google Sheet tab banao: `PostgresQueries` — headers: `Name | SQL Query | Tag`
+Har row mein: dashboard ka naam, poora SQL query (SELECT statement), aur (optional) tag.
+
+**Env vars chahiye (Vercel mein add karo):**
+- `SSH_HOST`, `SSH_PORT` (default 22), `SSH_USER`, `SSH_PRIVATE_KEY` (poori PEM key, `.pem` file ka content)
+- `PG_HOST` — Postgres ka host **jaisa SSH server se dikhta hai** (aksar `localhost` ya `127.0.0.1`)
+- `PG_PORT`, `PG_DATABASE`, `PG_USER`, `PG_PASSWORD`
+
+Yeh Mixpanel dashboards se **bilkul alag** hai — home page pe apna separate section
+"Postgres Dashboards" mein dikhega, `/postgres/[row]` route pe.
+
+**Zaroori:** Query ka result jo bhi columns return kare, table automatically wahi columns
+dikha degi (generic renderer hai) — koi extra config nahi chahiye. Bas query likho, tag lagao, ho gaya.
+
+**Security note:** Sirf woh log jo Sheet edit kar sakte hain, SQL likh sakte hain — yeh
+utne hi trusted hain jitne Mixpanel links daalne wale. Read-only DB user use karna best practice hai
+(taaki galti se koi UPDATE/DELETE query na chal jaye).

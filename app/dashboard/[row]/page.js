@@ -2,12 +2,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getReportByRow, getAllowedSourcesForEmail, isTagAllowed } from '@/lib/googleSheets';
 import { extractReportId, fetchMixpanelReport, buildAllMatrices, filterMatricesBySources, pruneEmptySources } from '@/lib/mixpanel';
+import { runDateSeriesQuery } from '@/lib/postgres';
 import DashboardClient from '@/components/DashboardClient';
 import ThemeToggle from '@/components/ThemeToggle';
 import RequestAccess from '@/components/RequestAccess';
-import Link from 'next/link';
+import BackLink from '@/components/BackLink';
 
-export const revalidate = 300; // re-fetch Mixpanel data at most every 5 minutes
+export const revalidate = 300; // re-fetch data at most every 5 minutes
 
 export default async function DashboardPage({ params }) {
   const session = await getServerSession(authOptions);
@@ -55,14 +56,28 @@ export default async function DashboardPage({ params }) {
   // with a proper retry button, isolated to just this dashboard.
   const raw = await fetchMixpanelReport(reportId);
   const matrices = pruneEmptySources(filterMatricesBySources(buildAllMatrices(raw), allowedSources));
+
+  // If this Report row also has a Postgres query configured, merge its result in
+  // as an extra metric option - same Trend/Table/Breakdown UI handles it automatically,
+  // since it's just another entry in the same matrices object.
+  let postgresWarning = null;
+  if (report.postgresQuery) {
+    try {
+      const pgMatrix = await runDateSeriesQuery(report.postgresQuery, report.postgresLabel);
+      matrices[report.postgresLabel] = pgMatrix;
+    } catch (err) {
+      // Don't fail the whole dashboard if just the Postgres part breaks -
+      // show the Mixpanel data anyway, with a small warning banner.
+      postgresWarning = `Couldn't load "${report.postgresLabel}" from Postgres: ${err.message}`;
+    }
+  }
+
   const syncedAt = new Date();
 
   return (
     <div className="max-w-5xl mx-auto px-5 py-10">
       <div className="flex justify-between items-center mb-4">
-        <Link href="/" className="text-xs text-dim hover:text-accent inline-flex items-center gap-1">
-          &larr; Dashboards
-        </Link>
+        <BackLink />
         <ThemeToggle />
       </div>
       <div className="flex items-baseline justify-between flex-wrap gap-2 mb-6">
@@ -71,6 +86,11 @@ export default async function DashboardPage({ params }) {
           Synced {syncedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
         </span>
       </div>
+      {postgresWarning && (
+        <div className="mb-4 text-xs text-warn border border-warn/30 bg-warn/10 rounded-lg px-3 py-2">
+          {postgresWarning}
+        </div>
+      )}
       <DashboardClient matrices={matrices} />
     </div>
   );
