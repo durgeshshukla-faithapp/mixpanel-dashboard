@@ -1,10 +1,11 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getReportByRow, getAllowedSourcesForEmail, isTagAllowed } from '@/lib/googleSheets';
-import { extractReportId, fetchMixpanelReport, buildAllMatrices, filterMatricesBySources, pruneEmptySources } from '@/lib/mixpanel';
+import { getReportByRow, getAllowedSourcesForEmail, isDashboardAllowed } from '@/lib/googleSheets';
+import { extractReportId, fetchMixpanelReport, buildAllMatrices, filterMatricesBySources, pruneEmptySources, extractFunnelId, fetchMixpanelFunnel } from '@/lib/mixpanel';
 import { runDateSeriesQuery } from '@/lib/postgres';
 import DashboardClient from '@/components/DashboardClient';
 import ThemeToggle from '@/components/ThemeToggle';
+import DashboardChat from '@/components/DashboardChat';
 import RequestAccess from '@/components/RequestAccess';
 import BackLink from '@/components/BackLink';
 
@@ -30,7 +31,7 @@ export default async function DashboardPage({ params }) {
   }
 
   // Full block: if this dashboard's tag isn't in the user's allowed tags, deny entirely
-  if (!isTagAllowed(report.tag, session.allowedTags)) {
+  if (!isDashboardAllowed(report.name, report.tag, session.allowedTags, session.allowedDashboards)) {
     return (
       <div className="min-h-screen flex items-center justify-center text-dim text-sm px-4 text-center">
         <div>
@@ -72,6 +73,22 @@ export default async function DashboardPage({ params }) {
     }
   }
 
+  // Optional real Mixpanel Funnel report (sequential steps) - separate from Insights data
+  let funnelData = null;
+  let funnelWarning = null;
+  if (report.funnelLink) {
+    const funnelId = extractFunnelId(report.funnelLink);
+    if (funnelId) {
+      try {
+        funnelData = await fetchMixpanelFunnel(funnelId);
+      } catch (err) {
+        funnelWarning = `Couldn't load the Funnel report: ${err.message}`;
+      }
+    } else {
+      funnelWarning = 'Could not parse a funnel ID from the Funnel Link.';
+    }
+  }
+
   const syncedAt = new Date();
 
   return (
@@ -91,7 +108,13 @@ export default async function DashboardPage({ params }) {
           {postgresWarning}
         </div>
       )}
-      <DashboardClient matrices={matrices} />
+      {funnelWarning && (
+        <div className="mb-4 text-xs text-warn border border-warn/30 bg-warn/10 rounded-lg px-3 py-2">
+          {funnelWarning}
+        </div>
+      )}
+      <DashboardClient matrices={matrices} funnelData={funnelData} />
+      {process.env.GEMINI_API_KEY && <DashboardChat matrices={matrices} />}
     </div>
   );
 }

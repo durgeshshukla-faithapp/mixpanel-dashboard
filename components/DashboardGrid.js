@@ -20,9 +20,14 @@ export default function DashboardGrid({ reports, availableTags, hrefPrefix = '/d
   const [activeTag, setActiveTag] = useState('All');
 
   const filtered = useMemo(() => {
+    const q = query.toLowerCase();
     return reports.filter((r) => {
       const matchesTag = activeTag === 'All' || r.tag === activeTag;
-      const matchesQuery = r.name.toLowerCase().includes(query.toLowerCase());
+      const matchesQuery =
+        !q ||
+        r.name.toLowerCase().includes(q) ||
+        (r.owner || '').toLowerCase().includes(q) ||
+        (r.tag || '').toLowerCase().includes(q);
       return matchesTag && matchesQuery;
     });
   }, [reports, query, activeTag]);
@@ -33,7 +38,7 @@ export default function DashboardGrid({ reports, availableTags, hrefPrefix = '/d
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search dashboards..."
+          placeholder="Search by name, owner, or tag..."
           className="bg-surface2 border border-border rounded-lg px-3 py-2 text-sm flex-1"
         />
       </div>
@@ -61,7 +66,7 @@ export default function DashboardGrid({ reports, availableTags, hrefPrefix = '/d
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {filtered.map((r) => (
-            <DashboardCard key={r.row} row={r.row} name={r.name} tag={r.tag} hrefPrefix={hrefPrefix} subtitle={subtitle} />
+            <DashboardCard key={r.row} row={r.row} name={r.name} tag={r.tag} owner={r.owner} hrefPrefix={hrefPrefix} subtitle={subtitle} />
           ))}
         </div>
       )}

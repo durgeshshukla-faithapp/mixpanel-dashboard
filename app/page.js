@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getReports, getPostgresQueries, isTagAllowed } from '@/lib/googleSheets';
+import { getReports, getPostgresQueries, isDashboardAllowed, isTagAllowed } from '@/lib/googleSheets';
 import SignInButton from '@/components/SignInButton';
 import ThemeToggle from '@/components/ThemeToggle';
 import DashboardGrid from '@/components/DashboardGrid';
@@ -27,7 +27,9 @@ export default async function HomePage() {
   const allowedTags = session.allowedTags;
 
   const allReports = await getReports();
-  const reports = allReports.filter((r) => isTagAllowed(r.tag, allowedTags));
+  const reports = allReports.filter((r) =>
+    isDashboardAllowed(r.name, r.tag, allowedTags, session.allowedDashboards || [])
+  );
   const mixpanelTags = Array.from(new Set(allReports.map((r) => r.tag).filter(Boolean)));
 
   // Postgres queries live in a completely separate sheet tab and are never

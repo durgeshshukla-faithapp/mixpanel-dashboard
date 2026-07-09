@@ -26,7 +26,7 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function DashboardClient({ matrices }) {
+export default function DashboardClient({ matrices, funnelData = null }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -55,8 +55,40 @@ export default function DashboardClient({ matrices }) {
   const [showMovingAvg, setShowMovingAvg] = useState(searchParams.get('ma') === '1');
   const [comparePrevious, setComparePrevious] = useState(searchParams.get('cmp') === '1');
   const [cumulative, setCumulative] = useState(searchParams.get('cum') === '1');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState('');
+
+  async function explainWithAi(kpisData, metricName) {
+    setAiLoading(true);
+    setAiExplanation('');
+    try {
+      const summary = {
+        total: kpisData.total,
+        dailyAverage: kpisData.avg,
+        peakDay: kpisData.peak,
+        lowestDay: kpisData.low,
+        weekOverWeekChangePercent: kpisData.wow,
+        unusualDays: kpisData.anomalies,
+      };
+      const res = await fetch('/api/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary, metricName: shortMetricName(metricName) }),
+      });
+      const data = await res.json();
+      setAiExplanation(data.text || data.error || 'No response');
+    } catch (err) {
+      setAiExplanation(`Error: ${err.message}`);
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   // Keep the URL in sync so the current view can be shared as a link
+  useEffect(() => {
+    setAiExplanation('');
+  }, [metric, dateFrom, dateTo, selectedSources]);
+
   useEffect(() => {
     const params = new URLSearchParams();
     params.set('view', view);
@@ -259,7 +291,10 @@ export default function DashboardClient({ matrices }) {
   return (
     <div>
       <div className="flex flex-wrap gap-1 mb-5 border-b border-border items-center">
-        {[['trend', 'Trend'], ['table', 'Table'], ['breakdown', 'Breakdown'], ['funnel', 'Funnel']].map(([key, label]) => (
+        {[
+          ['trend', 'Trend'], ['table', 'Table'], ['breakdown', 'Breakdown'], ['funnel', 'Compare'],
+          ...(funnelData ? [['realfunnel', 'Funnel']] : []),
+        ].map(([key, label]) => (
           <button
             key={key}
             onClick={() => setView(key)}
@@ -355,7 +390,7 @@ export default function DashboardClient({ matrices }) {
           ) : chartType === 'pie' ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110}>
+                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110} animationDuration={700} animationEasing="ease-out">
                   {pieData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
@@ -371,10 +406,10 @@ export default function DashboardClient({ matrices }) {
                   <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
                   <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
                   <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
-                  {!cumulative && sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} />)}
-                  {cumulative && <Bar dataKey="__cumulative" name="Cumulative" fill={PALETTE[0]} />}
-                  {showMovingAvg && !cumulative && <Line type="monotone" dataKey="__movingAvg" name="7-day avg" stroke="#8B96A5" strokeDasharray="4 3" dot={false} />}
-                  {comparePrevious && !cumulative && <Line type="monotone" dataKey="__previous" name="Previous period" stroke="#F0A868" strokeDasharray="4 3" dot={false} />}
+                  {!cumulative && sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} animationDuration={700} animationEasing="ease-out" />)}
+                  {cumulative && <Bar dataKey="__cumulative" name="Cumulative" fill={PALETTE[0]} animationDuration={700} animationEasing="ease-out" />}
+                  {showMovingAvg && !cumulative && <Line type="monotone" dataKey="__movingAvg" name="7-day avg" stroke="#8B96A5" strokeDasharray="4 3" dot={false} animationDuration={700} animationEasing="ease-out" />}
+                  {comparePrevious && !cumulative && <Line type="monotone" dataKey="__previous" name="Previous period" stroke="#F0A868" strokeDasharray="4 3" dot={false} animationDuration={700} animationEasing="ease-out" />}
                 </BarChart>
               ) : (
                 <LineChart data={chartData}>
@@ -384,11 +419,11 @@ export default function DashboardClient({ matrices }) {
                   <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
                   <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
                   {!cumulative && sources.map((s, i) => (
-                    <Line key={s} type="monotone" dataKey={s} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
+                    <Line key={s} type="monotone" dataKey={s} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} animationDuration={700} animationEasing="ease-out" />
                   ))}
-                  {cumulative && <Line type="monotone" dataKey="__cumulative" name="Cumulative" stroke={PALETTE[0]} strokeWidth={2} dot={false} />}
-                  {showMovingAvg && !cumulative && <Line type="monotone" dataKey="__movingAvg" name="7-day avg" stroke="#8B96A5" strokeWidth={2} strokeDasharray="4 3" dot={false} />}
-                  {comparePrevious && !cumulative && <Line type="monotone" dataKey="__previous" name="Previous period" stroke="#F0A868" strokeWidth={2} strokeDasharray="4 3" dot={false} />}
+                  {cumulative && <Line type="monotone" dataKey="__cumulative" name="Cumulative" stroke={PALETTE[0]} strokeWidth={2} dot={false} animationDuration={700} animationEasing="ease-out" />}
+                  {showMovingAvg && !cumulative && <Line type="monotone" dataKey="__movingAvg" name="7-day avg" stroke="#8B96A5" strokeWidth={2} strokeDasharray="4 3" dot={false} animationDuration={700} animationEasing="ease-out" />}
+                  {comparePrevious && !cumulative && <Line type="monotone" dataKey="__previous" name="Previous period" stroke="#F0A868" strokeWidth={2} strokeDasharray="4 3" dot={false} animationDuration={700} animationEasing="ease-out" />}
                 </LineChart>
               )}
             </ResponsiveContainer>
@@ -503,41 +538,96 @@ export default function DashboardClient({ matrices }) {
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : view === 'funnel' ? (
         <div className="border border-border bg-surface rounded-2xl p-5">
-          <h3 className="text-[11px] text-dim uppercase tracking-wide mb-4">
-            Funnel across metrics (Overall, selected date range)
+          <h3 className="text-[11px] text-dim uppercase tracking-wide mb-1">
+            Metric comparison (Overall, selected date range)
           </h3>
-          <div className="space-y-3">
+          <p className="text-xs text-dim mb-4">
+            These are different measurements of the same event, not sequential steps -
+            bars are scaled independently so each is readable, not as a % conversion.
+          </p>
+          <div className="space-y-4">
             {funnelStages.map((stage, i) => {
-              const pctOfFirst = funnelStages[0].total > 0 ? (stage.total / funnelStages[0].total) * 100 : 0;
-              const convFromPrev = i > 0 && funnelStages[i - 1].total > 0
-                ? (stage.total / funnelStages[i - 1].total) * 100 : null;
+              const maxInGroup = Math.max(...funnelStages.map((s) => s.total), 1);
+              const widthPct = (stage.total / maxInGroup) * 100;
               return (
                 <div key={stage.metric}>
                   <div className="flex justify-between items-baseline mb-1 text-xs">
                     <span>{stage.label}</span>
-                    <span className="text-dim num">
-                      {fmtNum(stage.total)}
-                      {convFromPrev !== null && <span className="ml-2 text-accent">{convFromPrev.toFixed(1)}% of prev stage</span>}
-                    </span>
+                    <span className="text-dim num">{fmtNum(stage.total)}</span>
                   </div>
                   <div className="h-6 bg-surface2 rounded-lg overflow-hidden">
                     <div
                       className="h-full rounded-lg"
-                      style={{ width: `${Math.max(pctOfFirst, 2)}%`, background: PALETTE[i % PALETTE.length] }}
+                      style={{ width: `${Math.max(widthPct, 2)}%`, background: PALETTE[i % PALETTE.length] }}
                     />
                   </div>
                 </div>
               );
             })}
           </div>
+          <p className="text-xs text-dim mt-4">
+            Have a real Mixpanel <strong>Funnel</strong> report (with sequential steps, not Insights)?
+            That needs a different data source - ask to add support for it specifically.
+          </p>
+        </div>
+      ) : (
+        <div className="border border-border bg-surface rounded-2xl p-5">
+          <h3 className="text-[11px] text-dim uppercase tracking-wide mb-4">
+            Funnel: sequential step drop-off (last 90 days)
+          </h3>
+          {funnelData && funnelData.steps.length > 0 ? (
+            <div className="space-y-4">
+              {funnelData.steps.map((step, i) => {
+                const pctOfFirst = funnelData.steps[0].count > 0 ? (step.count / funnelData.steps[0].count) * 100 : 0;
+                const pctOfPrev = i > 0 && funnelData.steps[i - 1].count > 0
+                  ? (step.count / funnelData.steps[i - 1].count) * 100 : null;
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between items-baseline mb-1 text-xs">
+                      <span>{step.label}</span>
+                      <span className="text-dim num">
+                        {fmtNum(step.count)}
+                        {pctOfPrev !== null && <span className="ml-2 text-accent">{pctOfPrev.toFixed(1)}% of prev step</span>}
+                      </span>
+                    </div>
+                    <div className="h-6 bg-surface2 rounded-lg overflow-hidden">
+                      <div
+                        className="h-full rounded-lg"
+                        style={{ width: `${Math.max(pctOfFirst, 2)}%`, background: PALETTE[i % PALETTE.length] }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-xs text-dim pt-2 border-t border-border">
+                Overall conversion: <span className="text-accent num">{funnelData.overallConversion.toFixed(1)}%</span>
+              </p>
+            </div>
+          ) : (
+            <p className="text-dim text-sm py-6 text-center">No funnel data available.</p>
+          )}
         </div>
       )}
 
       {view === 'trend' && kpis && (
         <div className="border border-border bg-surface rounded-2xl p-5 mt-5">
-          <h2 className="text-xs font-semibold text-dim uppercase tracking-wide mb-3">Key points</h2>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-xs font-semibold text-dim uppercase tracking-wide">Key points</h2>
+            <button
+              onClick={() => explainWithAi(kpis, metric)}
+              disabled={aiLoading}
+              className="text-xs px-3 py-1.5 rounded-lg border border-border bg-surface2 hover:border-accentDim transition disabled:opacity-50"
+            >
+              {aiLoading ? 'Thinking...' : '✨ Explain this'}
+            </button>
+          </div>
+          {aiExplanation && (
+            <div className="text-sm bg-accent/5 border border-accent/20 rounded-lg px-3 py-2 mb-3">
+              {aiExplanation}
+            </div>
+          )}
           <ul className="text-sm space-y-2">
             <li className="flex gap-2 pb-2 border-b border-border">
               <span className="text-accent num">&rarr;</span>

@@ -137,3 +137,39 @@ dikha degi (generic renderer hai) — koi extra config nahi chahiye. Bas query l
 **Security note:** Sirf woh log jo Sheet edit kar sakte hain, SQL likh sakte hain — yeh
 utne hi trusted hain jitne Mixpanel links daalne wale. Read-only DB user use karna best practice hai
 (taaki galti se koi UPDATE/DELETE query na chal jaye).
+
+## Owner + specific-dashboard access
+
+`Reports` sheet mein Column G add karo: header `Owner` — har row mein us dashboard
+banane/manage karne wale ka naam likho. Yeh card pe avatar+naam dikhega, aur search box
+se bhi milega.
+
+`Access` sheet mein Column D add karo: header `AllowedDashboards` — comma-separated exact
+dashboard names, jo tag se alag hatke specific dashboard access dene ke liye hai.
+Jaise: agar kisi ko sirf "OOO day by day revenue" dikhana hai (uska tag allowed na ho
+tab bhi), uske row mein yeh likho: `OOO day by day revenue`
+
+## Compare tab (pehle "Funnel" tha)
+
+Uniques/Events/Revenue jaise metrics **funnel ke stages nahi hain** (yeh sab ek hi event
+ke alag measurements hain) - isliye yeh tab ab sirf side-by-side comparison dikhata hai,
+galat "% conversion" nahi. Agar kabhi asli Mixpanel Funnel report (sequential steps wala)
+chahiye ho, woh alag data source hai - bata dena, alag se support add karenge.
+
+## AI features (Explain this + Chat) - Google Gemini free tier
+
+1. https://aistudio.google.com/apikey pe jaake ek free API key banao (Google account se login karke)
+2. Vercel mein env var add karo: `GEMINI_API_KEY` = woh key
+
+Ho gaya - do naye cheezein har dashboard pe apne aap dikhengi:
+- **"Explain this" button** (Key points section mein) - click karte hi AI plain English mein
+  batayega kya hua trend mein
+- **"Ask about this data" chat button** (bottom-right corner) - koi bhi sawal poocho
+  us dashboard ke data ke baare mein, AI usi data se jawab dega
+
+Agar `GEMINI_API_KEY` set nahi hai, yeh dono features automatically hide ho jaate hain -
+baaki dashboard normal kaam karta hai.
+
+**Free tier limits:** Gemini free tier roz ke reasonable requests allow karta hai
+(chhoti team ke internal use ke liye kaafi hai). Agar kabhi limit cross ho jaye,
+AI features thodi der ke liye kaam nahi karenge, baaki dashboard unaffected rahega.
