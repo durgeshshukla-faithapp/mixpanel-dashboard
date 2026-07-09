@@ -173,3 +173,11 @@ baaki dashboard normal kaam karta hai.
 **Free tier limits:** Gemini free tier roz ke reasonable requests allow karta hai
 (chhoti team ke internal use ke liye kaafi hai). Agar kabhi limit cross ho jaye,
 AI features thodi der ke liye kaam nahi karenge, baaki dashboard unaffected rahega.
+
+## Naye Mixpanel report types add karte waqt
+
+Ab dashboard **kabhi crash nahi hoga** agar koi naya report type ka data samajh na aaye -
+uske bajaye dashboard ke top pe ek chhota warning banayega jisme **"Copy for Claude"** button hoga.
+Bas woh button dabao, aur jo text copy ho, woh seedha Claude ko paste kar do - usme already poori
+technical detail hoti hai (metric ka naam, raw data sample) taaki turant fix ho sake, bina Vercel
+Logs mein dhundhne ke.

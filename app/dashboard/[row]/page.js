@@ -7,6 +7,7 @@ import DashboardClient from '@/components/DashboardClient';
 import ThemeToggle from '@/components/ThemeToggle';
 import DashboardChat from '@/components/DashboardChat';
 import RequestAccess from '@/components/RequestAccess';
+import DataShapeWarning from '@/components/DataShapeWarning';
 import BackLink from '@/components/BackLink';
 
 export const revalidate = 300; // re-fetch data at most every 5 minutes
@@ -56,7 +57,8 @@ export default async function DashboardPage({ params }) {
   // Throwing here (instead of returning inline error JSX) lets error.js catch it
   // with a proper retry button, isolated to just this dashboard.
   const raw = await fetchMixpanelReport(reportId);
-  const matrices = pruneEmptySources(filterMatricesBySources(buildAllMatrices(raw), allowedSources));
+  const { matrices: rawMatrices, warnings: shapeWarnings } = buildAllMatrices(raw);
+  const matrices = pruneEmptySources(filterMatricesBySources(rawMatrices, allowedSources));
 
   // If this Report row also has a Postgres query configured, merge its result in
   // as an extra metric option - same Trend/Table/Breakdown UI handles it automatically,
@@ -103,6 +105,7 @@ export default async function DashboardPage({ params }) {
           Synced {syncedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
         </span>
       </div>
+      <DataShapeWarning reportName={report.name} warnings={shapeWarnings} />
       {postgresWarning && (
         <div className="mb-4 text-xs text-warn border border-warn/30 bg-warn/10 rounded-lg px-3 py-2">
           {postgresWarning}
