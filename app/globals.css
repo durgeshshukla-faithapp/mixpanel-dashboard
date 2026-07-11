@@ -1,24 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root, .dark {
-  --bg: #0F1419;
-  --surface: #161C24;
-  --surface2: #1D2530;
-  --border: #2A323D;
-  --text: #E8ECF1;
-  --dim: #8B96A5;
+  --bg: #0D0F0E;
+  --surface: #1A1C1B;
+  --surface2: #222423;
+  --border: #2A2C2B;
+  --text: #F5F2ED;
+  --dim: #7A7D7B;
+  --gold: #C9A96E;
+  --up: #4E9B6F;
+  --down: #A85050;
 }
 
 .light {
-  --bg: #F7F7F5;
+  --bg: #F5F2ED;
   --surface: #FFFFFF;
-  --surface2: #F0EFEC;
-  --border: #E1E0D9;
-  --text: #16181C;
-  --dim: #6B7280;
+  --surface2: #EDEAE4;
+  --border: #D6D3CD;
+  --text: #1A1C1B;
+  --dim: #6A6D6B;
+  --gold: #9E8350;
+  --up: #3A7A55;
+  --down: #8B3E3E;
 }
 
 body {
@@ -27,7 +33,8 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 
-::-webkit-scrollbar { height: 6px; width: 6px; }
-::-webkit-scrollbar-thumb { background: #2A323D; border-radius: 3px; }
+::-webkit-scrollbar { height: 5px; width: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-.num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+.num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.display { font-family: 'Space Grotesk', sans-serif; }

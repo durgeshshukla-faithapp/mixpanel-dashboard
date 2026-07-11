@@ -6,12 +6,12 @@ export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="w-8 h-8" />;
+  if (!mounted) return <div className="w-7 h-7" />;
 
   return (
     <button
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      className="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-xs hover:border-accentDim transition"
+      className="w-7 h-7 rounded-md border border-border flex items-center justify-center text-[11px] hover:border-gold/40 transition font-mono text-dim hover:text-gold"
       title="Toggle theme"
     >
       {theme === 'dark' ? '☾' : '☀'}

@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 
-const PALETTE = ['#3DDC97', '#5B9FE8', '#F0A868', '#C58FE0', '#F0685C', '#4FD1D9', '#E8C15B', '#8B96A5'];
+const PALETTE = [PALETTE[0], PALETTE[1], PALETTE[2], PALETTE[3], PALETTE[4], PALETTE[5], PALETTE[6], PALETTE[7]];
 const OVERALL = 'Overall';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -303,7 +303,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
             key={key}
             onClick={() => setView(key)}
             className={`text-sm px-4 py-2 border-b-2 transition ${
-              view === key ? 'border-accent text-text font-medium' : 'border-transparent text-dim'
+              view === key ? 'border-gold text-text font-medium' : 'border-transparent text-dim'
             }`}
           >
             {label}
@@ -312,7 +312,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
         <div className="flex-1" />
         <button
           onClick={copyShareLink}
-          className="text-xs px-3 py-1.5 mb-2 rounded-lg border border-border bg-surface2 hover:border-accentDim transition"
+          className="text-xs px-3 py-1.5 mb-2 rounded-lg border border-border bg-surface2 hover:border-gold/40 transition"
           title="Copy a link to this exact view"
         >
           Copy link
@@ -342,7 +342,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
       )}
 
       {view === 'trend' ? (
-        <div className="border border-border bg-surface rounded-2xl p-5">
+        <div className="border border-border bg-surface rounded-lg p-5">
           <div className="flex flex-wrap gap-2 mb-4">
             <select
               value={metric}
@@ -379,11 +379,11 @@ export default function DashboardClient({ matrices, funnelData = null }) {
               <button
                 key={s}
                 onClick={() => toggleSource(s)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition ${
-                  selectedSources.has(s) ? 'border-accentDim bg-accent/10 text-text' : 'border-border bg-surface2 text-dim'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs border transition ${
+                  selectedSources.has(s) ? 'border-gold/40 bg-gold/10 text-text' : 'border-border bg-surface2 text-dim'
                 } ${s === OVERALL ? 'font-medium' : ''}`}
               >
-                <span className="w-2 h-2 rounded-sm" style={{ background: s === OVERALL ? '#8B96A5' : PALETTE[(i - 1) % PALETTE.length] }} />
+                <span className="w-2 h-2 rounded-sm" style={{ background: s === OVERALL ? PALETTE[7] : PALETTE[(i - 1) % PALETTE.length] }} />
                 {s}
               </button>
             ))}
@@ -454,7 +454,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
           </div>
         </div>
       ) : view === 'table' ? (
-        <div className="border border-border bg-surface rounded-2xl p-5">
+        <div className="border border-border bg-surface rounded-lg p-5">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <input
               value={tableSearch}
@@ -472,7 +472,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
             </select>
             <button
               onClick={downloadCsv}
-              className="text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-accentDim transition"
+              className="text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-gold/40 transition"
             >
               Export CSV
             </button>
@@ -513,7 +513,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
           </div>
         </div>
       ) : view === 'breakdown' ? (
-        <div className="border border-border bg-surface rounded-2xl p-5 overflow-x-auto">
+        <div className="border border-border bg-surface rounded-lg p-5 overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr>
@@ -530,20 +530,20 @@ export default function DashboardClient({ matrices, funnelData = null }) {
               {breakdownRows.map((r, i) => (
                 <tr key={r.source} className={r.source === OVERALL ? 'font-medium' : ''}>
                   <td className="py-2 px-2 border-b border-border flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-sm inline-block" style={{ background: r.source === OVERALL ? '#8B96A5' : PALETTE[(i - 1) % PALETTE.length] }} />
+                    <span className="w-2 h-2 rounded-sm inline-block" style={{ background: r.source === OVERALL ? PALETTE[7] : PALETTE[(i - 1) % PALETTE.length] }} />
                     {r.source}
                   </td>
                   {r.values.map((v, j) => (
                     <td key={j} className="text-right py-2 px-2 border-b border-border num">{fmtNum(v)}</td>
                   ))}
-                  <td className="text-right py-2 px-2 border-b border-border num text-accent">{r.share.toFixed(1)}%</td>
+                  <td className="text-right py-2 px-2 border-b border-border num text-gold">{r.share.toFixed(1)}%</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : view === 'funnel' ? (
-        <div className="border border-border bg-surface rounded-2xl p-5">
+        <div className="border border-border bg-surface rounded-lg p-5">
           <h3 className="text-[11px] text-dim uppercase tracking-wide mb-1">
             Metric comparison (Overall, selected date range)
           </h3>
@@ -577,7 +577,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
           </p>
         </div>
       ) : (
-        <div className="border border-border bg-surface rounded-2xl p-5">
+        <div className="border border-border bg-surface rounded-lg p-5">
           <h3 className="text-[11px] text-dim uppercase tracking-wide mb-4">
             Funnel: sequential step drop-off (last 90 days)
           </h3>
@@ -593,7 +593,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
                       <span>{step.label}</span>
                       <span className="text-dim num">
                         {fmtNum(step.count)}
-                        {pctOfPrev !== null && <span className="ml-2 text-accent">{pctOfPrev.toFixed(1)}% of prev step</span>}
+                        {pctOfPrev !== null && <span className="ml-2 text-gold">{pctOfPrev.toFixed(1)}% of prev step</span>}
                       </span>
                     </div>
                     <div className="h-6 bg-surface2 rounded-lg overflow-hidden">
@@ -606,7 +606,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
                 );
               })}
               <p className="text-xs text-dim pt-2 border-t border-border">
-                Overall conversion: <span className="text-accent num">{funnelData.overallConversion.toFixed(1)}%</span>
+                Overall conversion: <span className="text-gold num">{funnelData.overallConversion.toFixed(1)}%</span>
               </p>
             </div>
           ) : (
@@ -616,40 +616,40 @@ export default function DashboardClient({ matrices, funnelData = null }) {
       )}
 
       {view === 'trend' && kpis && (
-        <div className="border border-border bg-surface rounded-2xl p-5 mt-5">
+        <div className="border border-border bg-surface rounded-lg p-5 mt-5">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-xs font-semibold text-dim uppercase tracking-wide">Key points</h2>
             <button
               onClick={() => explainWithAi(kpis, metric)}
               disabled={aiLoading}
-              className="text-xs px-3 py-1.5 rounded-lg border border-border bg-surface2 hover:border-accentDim transition disabled:opacity-50"
+              className="text-xs px-3 py-1.5 rounded-lg border border-border bg-surface2 hover:border-gold/40 transition disabled:opacity-50"
             >
               {aiLoading ? 'Thinking...' : '✨ Explain this'}
             </button>
           </div>
           {aiExplanation && (
-            <div className="text-sm bg-accent/5 border border-accent/20 rounded-lg px-3 py-2 mb-3">
+            <div className="text-sm bg-accent/5 border border-gold/20 rounded-lg px-3 py-2 mb-3">
               {aiExplanation}
             </div>
           )}
           <ul className="text-sm space-y-2">
             <li className="flex gap-2 pb-2 border-b border-border">
-              <span className="text-accent num">&rarr;</span>
+              <span className="text-gold num">&rarr;</span>
               Peak day: <span className="num">{kpis.peak.date}</span> ({fmtNum(kpis.peak.value)})
             </li>
             <li className="flex gap-2 pb-2 border-b border-border">
-              <span className="text-accent num">&rarr;</span>
+              <span className="text-gold num">&rarr;</span>
               Lowest day: <span className="num">{kpis.low.date}</span> ({fmtNum(kpis.low.value)})
             </li>
             {kpis.wow !== null && (
               <li className="flex gap-2 pb-2 border-b border-border">
-                <span className="text-accent num">&rarr;</span>
+                <span className="text-gold num">&rarr;</span>
                 Last 7 days vs previous 7: {kpis.wow >= 0 ? '+' : ''}{kpis.wow.toFixed(1)}%
               </li>
             )}
             {kpis.anomalies.length > 0 && kpis.anomalies.map((a) => (
               <li key={a.date} className="flex gap-2 pb-2 border-b border-border last:border-0">
-                <span className="text-warn num">&rarr;</span>
+                <span className="text-gold num">&rarr;</span>
                 Unusual day: <span className="num">{a.date}</span> ({fmtNum(a.value)}, {a.z >= 0 ? 'above' : 'below'} normal range)
               </li>
             ))}
@@ -662,12 +662,12 @@ export default function DashboardClient({ matrices, funnelData = null }) {
 
 function Kpi({ label, value, delta, sub }) {
   return (
-    <div className="border border-border bg-surface rounded-2xl p-4">
+    <div className="border border-border bg-surface rounded-lg p-4">
       <div className="text-[11px] text-dim uppercase tracking-wide mb-1.5">{label}</div>
-      <div className="text-xl font-semibold num">{value}</div>
+      <div className="text-2xl font-display font-bold">{value}</div>
       {sub && <div className="text-[11px] text-dim mt-1 num">{sub}</div>}
       {delta !== undefined && delta !== null && (
-        <div className={`text-xs mt-1 ${delta >= 0 ? 'text-accent' : 'text-neg'}`}>
+        <div className={`text-xs mt-1 ${delta >= 0 ? 'text-gold' : 'text-down'}`}>
           {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}% vs prior 7d
         </div>
       )}

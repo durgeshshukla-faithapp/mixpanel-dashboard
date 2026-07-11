@@ -181,3 +181,26 @@ uske bajaye dashboard ke top pe ek chhota warning banayega jisme **"Copy for Cla
 Bas woh button dabao, aur jo text copy ho, woh seedha Claude ko paste kar do - usme already poori
 technical detail hoti hai (metric ka naam, raw data sample) taaki turant fix ho sake, bina Vercel
 Logs mein dhundhne ke.
+
+## Explore (Query Builder) - /explore
+
+Har signed-in user ke liye ek dynamic query builder — bina saved report ke, seedha data explore karo:
+- **Insights tab:** koi bhi event chuno, filters lagao (equals/contains/greater than), kisi bhi
+  property se breakdown karo, Total events/Unique users/Average choose karo, line/bar/table dekho
+- **Funnels tab:** project ke saved funnels list se chuno, date range ke saath steps + conversion dekho
+- **Retention tab:** cohort event + return event chuno, daily/weekly/monthly retention table dekho
+
+Yeh Mixpanel ke **documented Query API** (segmentation/retention/funnels) use karta hai — stable hai.
+Dhyan rahe: har "Run query" Mixpanel ke 60/hour rate limit mein count hota hai (results 5 min cache hote hain).
+
+## Admin Panel - /admin (sirf SUPER_ADMIN_EMAIL ke liye)
+
+Dashboard se hi manage karo, Sheet kholne ki zaroorat nahi:
+- **Add dashboard:** naam + Mixpanel link + tag + owner daalo → seedha Reports sheet mein row add ho jayega
+- **Grant access:** email + allowed tags/sources/dashboards → Access sheet mein add ho jayega
+
+**Zaroori setup:** Service account ko Sheet pe **Editor** access do (pehle Viewer tha):
+Sheet kholo → Share → service account email ke saamne Viewer ko **Editor** kar do.
+
+**Limitation (abhi):** Sirf naye rows add hote hain — existing ko edit/delete karne ke liye Sheet hi kholna
+padega. Duplicate email add karne se pehla wala row hi effective rahega.
