@@ -37,6 +37,14 @@ export async function POST(req) {
     }
     return NextResponse.json({ error: 'Unknown kind' }, { status: 400 });
   } catch (err) {
+    // Detect Mixpanel rate limit specifically and give a clear, actionable message
+    const isRateLimit = /429|rate.?limit/i.test(err.message || '');
+    if (isRateLimit) {
+      return NextResponse.json({
+        error: 'Mixpanel rate limit hit (60 queries/hour). Thoda wait karo (10-15 min) aur phir try karo. Dashboard data Sheet se aa raha hai, woh normal chalega.',
+        isRateLimit: true,
+      }, { status: 429 });
+    }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

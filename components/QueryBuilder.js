@@ -9,6 +9,76 @@ const inputCls = 'bg-surface2 border border-border rounded-md px-3 py-2 text-xs 
 const labelCls = 'text-[10px] text-dim uppercase tracking-widest font-display font-medium mb-1 block';
 const btnCls = 'bg-gold text-bg font-display font-medium text-sm px-5 py-2 rounded-md hover:opacity-90 transition disabled:opacity-40';
 
+// Searchable dropdown - used for events, properties, funnels
+function SearchSelect({ value, onChange, options, placeholder, label }) {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const filtered = options.filter((o) => {
+    const name = typeof o === 'string' ? o : o.label;
+    return name.toLowerCase().includes(search.toLowerCase());
+  });
+  const displayValue = typeof value === 'string' ? value : '';
+
+  return (
+    <div className="relative">
+      {label && <label className={labelCls}>{label}</label>}
+      <div
+        onClick={() => setOpen(!open)}
+        className={inputCls + ' w-full cursor-pointer flex justify-between items-center gap-2'}
+      >
+        <span className={displayValue ? 'text-text' : 'text-dim/50'}>{displayValue || placeholder}</span>
+        <span className="text-dim text-[10px]">▼</span>
+      </div>
+      {open && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-md shadow-xl max-h-60 overflow-hidden">
+          <div className="p-1.5">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search..."
+              className={inputCls + ' w-full'}
+              autoFocus
+            />
+          </div>
+          <div className="overflow-y-auto max-h-44">
+            {placeholder && (
+              <div
+                onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
+                className="px-3 py-1.5 text-xs text-dim hover:bg-surface2 cursor-pointer"
+              >
+                {placeholder}
+              </div>
+            )}
+            {filtered.length === 0 && (
+              <div className="px-3 py-3 text-xs text-dim text-center">No matches</div>
+            )}
+            {filtered.map((o) => {
+              const val = typeof o === 'string' ? o : o.value;
+              const name = typeof o === 'string' ? o : o.label;
+              return (
+                <div
+                  key={val}
+                  onClick={() => { onChange(val); setOpen(false); setSearch(''); }}
+                  className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-surface2 ${val === value ? 'text-gold' : 'text-text'}`}
+                >
+                  {name}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const QUICK_RANGES = [
+  { label: '7D', days: 7 },
+  { label: '14D', days: 14 },
+  { label: '30D', days: 30 },
+  { label: '90D', days: 90 },
+];
+
 function fmtNum(n) {
   if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(2) + 'M';
   if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + 'K';
@@ -36,6 +106,7 @@ export default function QueryBuilder() {
   const [funnels, setFunnels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   // Insights state
   const [event, setEvent] = useState('');
@@ -94,6 +165,7 @@ export default function QueryBuilder() {
   async function runQuery() {
     setLoading(true);
     setError('');
+    setIsRateLimited(false);
     try {
       if (mode === 'insights') {
         const res = await fetch('/api/mixpanel-query', {
@@ -108,7 +180,7 @@ export default function QueryBuilder() {
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        if (!res.ok) { const e = new Error(data.error); e.isRateLimit = data.isRateLimit; throw e; }
         setSegResult(data);
       } else if (mode === 'funnel') {
         const res = await fetch('/api/mixpanel-query', {
@@ -117,7 +189,7 @@ export default function QueryBuilder() {
           body: JSON.stringify({ kind: 'funnel', funnelId, fromDate, toDate }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        if (!res.ok) { const e = new Error(data.error); e.isRateLimit = data.isRateLimit; throw e; }
         setFunnelResult(data);
       } else {
         const res = await fetch('/api/mixpanel-query', {
@@ -129,10 +201,11 @@ export default function QueryBuilder() {
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        if (!res.ok) { const e = new Error(data.error); e.isRateLimit = data.isRateLimit; throw e; }
         setRetentionResult(data);
       }
     } catch (err) {
+      if (err.isRateLimit) setIsRateLimited(true);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -173,11 +246,13 @@ export default function QueryBuilder() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className={labelCls}>Event *</label>
-                <select value={event} onChange={(e) => { setEvent(e.target.value); setBreakdown(''); setFilters([]); }} className={inputCls + ' w-full'}>
-                  <option value="">Select event...</option>
-                  {events.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
-                </select>
+                                <SearchSelect
+                    value={event}
+                    onChange={(v) => { setEvent(v); setBreakdown(''); setFilters([]); }}
+                    options={events}
+                    placeholder="Select event..."
+                    label="Event *"
+                  />
               </div>
               <div>
                 <label className={labelCls}>Measure</label>
@@ -188,11 +263,13 @@ export default function QueryBuilder() {
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Breakdown by</label>
-                <select value={breakdown} onChange={(e) => setBreakdown(e.target.value)} className={inputCls + ' w-full'} disabled={!event}>
-                  <option value="">No breakdown</option>
-                  {properties.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
+                                <SearchSelect
+                    value={breakdown}
+                    onChange={setBreakdown}
+                    options={properties}
+                    placeholder="No breakdown"
+                    label="Breakdown by"
+                  />
               </div>
             </div>
 
@@ -245,11 +322,13 @@ export default function QueryBuilder() {
 
         {mode === 'funnel' && (
           <div>
-            <label className={labelCls}>Saved funnel *</label>
-            <select value={funnelId} onChange={(e) => setFunnelId(e.target.value)} className={inputCls + ' w-full sm:w-96'}>
-              <option value="">Select funnel...</option>
-              {funnels.map((f) => <option key={f.funnel_id} value={f.funnel_id}>{f.name}</option>)}
-            </select>
+                        <SearchSelect
+                value={funnelId}
+                onChange={setFunnelId}
+                options={funnels.map((f) => ({ value: String(f.funnel_id), label: f.name }))}
+                placeholder="Select funnel..."
+                label="Saved funnel *"
+              />
             {funnels.length === 0 && (
               <p className="text-[11px] text-dim mt-2">
                 No saved funnels found in the project — create one inside Mixpanel first (Funnels section).
@@ -261,18 +340,22 @@ export default function QueryBuilder() {
         {mode === 'retention' && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className={labelCls}>Cohort event (did first) *</label>
-              <select value={bornEvent} onChange={(e) => setBornEvent(e.target.value)} className={inputCls + ' w-full'}>
-                <option value="">Select event...</option>
-                {events.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
-              </select>
+                            <SearchSelect
+                  value={bornEvent}
+                  onChange={setBornEvent}
+                  options={events}
+                  placeholder="Select event..."
+                  label="Cohort event (did first) *"
+                />
             </div>
             <div>
-              <label className={labelCls}>Return event (came back to do)</label>
-              <select value={returnEvent} onChange={(e) => setReturnEvent(e.target.value)} className={inputCls + ' w-full'}>
-                <option value="">Any event</option>
-                {events.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
-              </select>
+                            <SearchSelect
+                  value={returnEvent}
+                  onChange={setReturnEvent}
+                  options={events}
+                  placeholder="Any event"
+                  label="Return event (came back to do)"
+                />
             </div>
             <div>
               <label className={labelCls}>Unit</label>
@@ -287,6 +370,21 @@ export default function QueryBuilder() {
 
         {/* Shared: date range + run */}
         <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-border">
+          <div className="flex gap-1">
+            {QUICK_RANGES.map((r) => (
+              <button
+                key={r.label}
+                onClick={() => { setFromDate(daysAgo(r.days)); setToDate(daysAgo(0)); }}
+                className={`text-[10px] px-2 py-1 rounded font-display font-medium border transition ${
+                  fromDate === daysAgo(r.days) && toDate === daysAgo(0)
+                    ? 'border-gold/40 bg-gold/10 text-gold'
+                    : 'border-border bg-surface2 text-dim hover:border-dim'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
           <div>
             <label className={labelCls}>From</label>
             <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputCls} />
@@ -312,8 +410,18 @@ export default function QueryBuilder() {
       </div>
 
       {error && (
-        <div className="mb-4 text-xs font-mono text-down border border-down/30 bg-down/10 rounded-md px-3 py-2">
+        <div className={`mb-4 text-xs font-mono rounded-md px-3 py-2.5 border ${
+          isRateLimited
+            ? 'text-gold border-gold/30 bg-gold/10'
+            : 'text-down border-down/30 bg-down/10'
+        }`}>
+          <div className="font-display font-medium mb-1 text-[11px]">
+            {isRateLimited ? '⏱ Rate limit' : '✕ Error'}
+          </div>
           {error}
+          {isRateLimited && (
+            <div className="mt-2 text-dim">Dashboard data is not affected — sirf Explore queries temporarily paused.</div>
+          )}
         </div>
       )}
 

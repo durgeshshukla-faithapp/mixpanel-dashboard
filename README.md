@@ -204,3 +204,35 @@ Sheet kholo → Share → service account email ke saamne Viewer ko **Editor** k
 
 **Limitation (abhi):** Sirf naye rows add hote hain — existing ko edit/delete karne ke liye Sheet hi kholna
 padega. Duplicate email add karne se pehla wala row hi effective rahega.
+
+## Sheet-Sync Architecture (Mixpanel → Sheet → Dashboard)
+
+Dashboards ab **live Mixpanel API se seedha nahi**, balki ek "SyncedData" Sheet tab se
+padhte hain — jo har din (ya manually "Sync now" se) Mixpanel se fresh data leke Sheet
+mein bharta hai. Isse har naye report ka "data-shape" issue ek hi jagah (sync ke waqt)
+solve hota hai, dashboard hamesha simple/consistent data padhta hai.
+
+### Setup
+
+1. Google Sheet mein 2 naye tabs banao:
+   - **`SyncedData`** — headers: `ReportRow | Metric | Source | Date | Value`
+   - **`SyncMeta`** — bas khaali chhod do, code khud A1 mein timestamp likhega
+2. Vercel env var add karo: `CRON_SECRET` = koi bhi random lambi string
+   (`openssl rand -base64 24` se bana sakte ho)
+3. Service account ko Sheet pe **Editor** access do (pehle se ho chuka hai agar Admin
+   Panel setup kiya tha)
+
+### Sync kaise chalta hai
+
+- **Automatic:** Vercel ka apna Cron, roz raat ~3 AM UTC (Hobby plan ki 1x/day limit ke andar)
+- **Manual:** Admin Panel (`/admin`) → "Data sync" tab → "Sync now" button — turant chalta hai,
+  naya dashboard add karne ke baad yeh use karna taaki turant data aa jaye
+- **Fallback:** Agar kisi dashboard ka abhi tak sync nahi hua (naya add kiya hai), dashboard
+  khud-ba-khud live Mixpanel se fetch kar lega us waqt tak — kuch bhi break nahi hota
+
+### Zyada frequent sync chahiye? (din mein ek se zyada baar)
+
+Vercel ka free Cron sirf din mein 1 baar chalta hai. Zyada fresh chahiye toh:
+1. https://cron-job.org pe free account banao
+2. Naya cron job: URL = `https://mixpanel-dashboard-lilac.vercel.app/api/cron/sync?secret=YOUR_CRON_SECRET`
+3. Frequency jitni chaho rakho (jaise har 30 minute) — bilkul free

@@ -9,6 +9,8 @@ export default function AdminPanel() {
   const [existing, setExisting] = useState({ reports: [], access: [] });
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   // Report form
   const [rName, setRName] = useState('');
@@ -55,10 +57,25 @@ export default function AdminPanel() {
     }
   }
 
+  async function runSync() {
+    setSyncBusy(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/admin/sync', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      setSyncResult(data);
+    } catch (err) {
+      setSyncResult({ error: err.message });
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex gap-1 mb-5 border-b border-border">
-        {[['report', 'Add dashboard'], ['access', 'Grant access']].map(([key, label]) => (
+        {[['report', 'Add dashboard'], ['access', 'Grant access'], ['sync', 'Data sync']].map(([key, label]) => (
           <button
             key={key}
             onClick={() => { setTab(key); setStatus(''); }}
@@ -167,6 +184,43 @@ export default function AdminPanel() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'sync' && (
+        <div className="bg-surface border border-border rounded-lg p-5 space-y-4">
+          <p className="text-[11px] text-dim">
+            Dashboards read from a "SyncedData" sheet tab that&apos;s refreshed automatically once a day
+            (Vercel Hobby cron limit). Click below to sync right now instead of waiting -
+            useful right after adding a new dashboard.
+          </p>
+          <button onClick={runSync} disabled={syncBusy} className={btnCls}>
+            {syncBusy ? 'Syncing... (can take up to a minute)' : 'Sync now'}
+          </button>
+
+          {syncResult && (
+            <div className="pt-3 border-t border-border">
+              {syncResult.error ? (
+                <div className="text-xs font-mono text-down">{syncResult.error}</div>
+              ) : (
+                <>
+                  <div className="text-xs text-up font-mono mb-2">
+                    ✓ Synced {syncResult.totalRows} data points at {new Date(syncResult.syncedAt).toLocaleTimeString()}
+                  </div>
+                  <div className="space-y-1">
+                    {syncResult.results.map((r, i) => (
+                      <div key={i} className="text-[11px] font-mono flex justify-between">
+                        <span className="text-dim truncate">{r.report}</span>
+                        <span className={r.status === 'ok' ? 'text-up' : r.status === 'error' ? 'text-down' : 'text-gold'}>
+                          {r.status === 'ok' ? `${r.points} points` : r.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

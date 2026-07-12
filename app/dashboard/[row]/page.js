@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getReportByRow, getAllowedSourcesForEmail, isDashboardAllowed } from '@/lib/googleSheets';
+import { getReportByRow, getAllowedSourcesForEmail, isDashboardAllowed, getSyncedMatrices, getSyncTimestamp } from '@/lib/googleSheets';
 import { extractReportId, fetchMixpanelReport, buildAllMatrices, filterMatricesBySources, pruneEmptySources, extractFunnelId, fetchMixpanelFunnel } from '@/lib/mixpanel';
 import { runDateSeriesQuery } from '@/lib/postgres';
 import DashboardClient from '@/components/DashboardClient';
@@ -10,7 +10,11 @@ import RequestAccess from '@/components/RequestAccess';
 import DataShapeWarning from '@/components/DataShapeWarning';
 import BackLink from '@/components/BackLink';
 
-export const revalidate = 300; // re-fetch data at most every 5 minutes
+export const revalidate = 300;
+
+function hasAnyData(matrices) {
+  return Object.values(matrices).some((m) => m.sources.length > 0);
+}
 
 export default async function DashboardPage({ params }) {
   const session = await getServerSession(authOptions);
@@ -31,7 +35,6 @@ export default async function DashboardPage({ params }) {
     );
   }
 
-  // Full block: if this dashboard's tag isn't in the user's allowed tags, deny entirely
   if (!isDashboardAllowed(report.name, report.tag, session.allowedTags, session.allowedDashboards)) {
     return (
       <div className="min-h-screen flex items-center justify-center text-dim text-sm px-4 text-center">
@@ -43,39 +46,52 @@ export default async function DashboardPage({ params }) {
     );
   }
 
-  const reportId = extractReportId(report.link);
-  if (!reportId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-dim text-sm">
-        Could not parse the Mixpanel report ID from this link.
-      </div>
-    );
+  const allowedSources = await getAllowedSourcesForEmail(session.user.email);
+  let matrices = {};
+  let shapeWarnings = [];
+  let dataSource = 'synced';
+  let syncedAt = null;
+
+  // Try Sheet-synced data first (fast, reliable, immune to live API quirks/rate limits).
+  // Falls back to a live Mixpanel fetch if nothing has been synced for this report yet
+  // (e.g. it was just added and the daily sync hasn't run) - so nothing ever breaks.
+  try {
+    const synced = await getSyncedMatrices(report.row);
+    if (hasAnyData(synced)) {
+      matrices = pruneEmptySources(filterMatricesBySources(synced, allowedSources));
+      syncedAt = await getSyncTimestamp();
+    }
+  } catch (err) {
+    // SyncedData tab may not exist yet - fall through to live fetch
   }
 
-  const allowedSources = await getAllowedSourcesForEmail(session.user.email);
+  if (!hasAnyData(matrices)) {
+    dataSource = 'live';
+    const reportId = extractReportId(report.link);
+    if (!reportId) {
+      return (
+        <div className="min-h-screen flex items-center justify-center text-dim text-sm">
+          Could not parse the Mixpanel report ID from this link.
+        </div>
+      );
+    }
+    const raw = await fetchMixpanelReport(reportId);
+    const built = buildAllMatrices(raw);
+    shapeWarnings = built.warnings;
+    matrices = pruneEmptySources(filterMatricesBySources(built.matrices, allowedSources));
+    syncedAt = new Date().toISOString();
+  }
 
-  // Throwing here (instead of returning inline error JSX) lets error.js catch it
-  // with a proper retry button, isolated to just this dashboard.
-  const raw = await fetchMixpanelReport(reportId);
-  const { matrices: rawMatrices, warnings: shapeWarnings } = buildAllMatrices(raw);
-  const matrices = pruneEmptySources(filterMatricesBySources(rawMatrices, allowedSources));
-
-  // If this Report row also has a Postgres query configured, merge its result in
-  // as an extra metric option - same Trend/Table/Breakdown UI handles it automatically,
-  // since it's just another entry in the same matrices object.
   let postgresWarning = null;
   if (report.postgresQuery) {
     try {
       const pgMatrix = await runDateSeriesQuery(report.postgresQuery, report.postgresLabel);
       matrices[report.postgresLabel] = pgMatrix;
     } catch (err) {
-      // Don't fail the whole dashboard if just the Postgres part breaks -
-      // show the Mixpanel data anyway, with a small warning banner.
       postgresWarning = `Couldn't load "${report.postgresLabel}" from Postgres: ${err.message}`;
     }
   }
 
-  // Optional real Mixpanel Funnel report (sequential steps) - separate from Insights data
   let funnelData = null;
   let funnelWarning = null;
   if (report.funnelLink) {
@@ -91,8 +107,6 @@ export default async function DashboardPage({ params }) {
     }
   }
 
-  const syncedAt = new Date();
-
   return (
     <div className="max-w-5xl mx-auto px-5 py-10">
       <div className="flex justify-between items-center mb-4">
@@ -100,19 +114,19 @@ export default async function DashboardPage({ params }) {
         <ThemeToggle />
       </div>
       <div className="flex items-baseline justify-between flex-wrap gap-2 mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">{report.name}</h1>
-        <span className="text-xs text-dim">
-          Synced {syncedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+        <h1 className="font-display text-xl font-bold tracking-tight">{report.name}</h1>
+        <span className="text-[11px] text-dim font-mono">
+          {dataSource === 'synced' ? 'Synced' : 'Live'} {syncedAt ? new Date(syncedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
         </span>
       </div>
       <DataShapeWarning reportName={report.name} warnings={shapeWarnings} />
       {postgresWarning && (
-        <div className="mb-4 text-xs text-warn border border-warn/30 bg-warn/10 rounded-lg px-3 py-2">
+        <div className="mb-4 text-xs text-gold border border-gold/30 bg-gold/10 rounded-lg px-3 py-2">
           {postgresWarning}
         </div>
       )}
       {funnelWarning && (
-        <div className="mb-4 text-xs text-warn border border-warn/30 bg-warn/10 rounded-lg px-3 py-2">
+        <div className="mb-4 text-xs text-gold border border-gold/30 bg-gold/10 rounded-lg px-3 py-2">
           {funnelWarning}
         </div>
       )}
