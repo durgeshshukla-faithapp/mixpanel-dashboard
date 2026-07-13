@@ -11,6 +11,7 @@ import DataShapeWarning from '@/components/DataShapeWarning';
 import BackLink from '@/components/BackLink';
 
 export const revalidate = 300;
+export const maxDuration = 60;
 
 function hasAnyData(matrices) {
   return Object.values(matrices).some((m) => m.sources.length > 0);
@@ -59,7 +60,7 @@ export default async function DashboardPage({ params }) {
     const synced = await getSyncedMatrices(report.row);
     if (hasAnyData(synced)) {
       matrices = pruneEmptySources(filterMatricesBySources(synced, allowedSources));
-      syncedAt = await getSyncTimestamp();
+      syncedAt = await getSyncTimestamp(report.row);
     }
   } catch (err) {
     // SyncedData tab may not exist yet - fall through to live fetch
