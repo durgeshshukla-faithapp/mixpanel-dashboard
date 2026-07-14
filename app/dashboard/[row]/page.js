@@ -52,35 +52,66 @@ export default async function DashboardPage({ params }) {
   let shapeWarnings = [];
   let dataSource = 'synced';
   let syncedAt = null;
+  let sheetError = null;
+  let liveError = null;
 
-  // Try Sheet-synced data first (fast, reliable, immune to live API quirks/rate limits).
-  // Falls back to a live Mixpanel fetch if nothing has been synced for this report yet
-  // (e.g. it was just added and the daily sync hasn't run) - so nothing ever breaks.
+  // Try Sheet-synced data first (fast, immune to Mixpanel rate limits).
+  // Falls back to a live Mixpanel fetch if this report hasn't been synced yet.
   try {
     const synced = await getSyncedMatrices(report.row);
     if (hasAnyData(synced)) {
       matrices = pruneEmptySources(filterMatricesBySources(synced, allowedSources));
       syncedAt = await getSyncTimestamp(report.row);
+    } else {
+      sheetError = `Sync_${report.row} tab was read but contained no usable data rows.`;
     }
   } catch (err) {
-    // SyncedData tab may not exist yet - fall through to live fetch
+    sheetError = err.message;
   }
 
   if (!hasAnyData(matrices)) {
     dataSource = 'live';
     const reportId = extractReportId(report.link);
     if (!reportId) {
-      return (
-        <div className="min-h-screen flex items-center justify-center text-dim text-sm">
-          Could not parse the Mixpanel report ID from this link.
-        </div>
-      );
+      liveError = 'Could not parse the Mixpanel report ID from this link.';
+    } else {
+      try {
+        const raw = await fetchMixpanelReport(reportId);
+        const built = buildAllMatrices(raw);
+        shapeWarnings = built.warnings;
+        matrices = pruneEmptySources(filterMatricesBySources(built.matrices, allowedSources));
+        syncedAt = new Date().toISOString();
+      } catch (err) {
+        liveError = err.message;
+      }
     }
-    const raw = await fetchMixpanelReport(reportId);
-    const built = buildAllMatrices(raw);
-    shapeWarnings = built.warnings;
-    matrices = pruneEmptySources(filterMatricesBySources(built.matrices, allowedSources));
-    syncedAt = new Date().toISOString();
+  }
+
+  // Both paths failed - show exactly why, instead of a generic "couldn't load" page
+  if (!hasAnyData(matrices)) {
+    return (
+      <div className="max-w-2xl mx-auto px-5 py-16">
+        <BackLink />
+        <h1 className="font-display text-lg font-bold mt-6 mb-4">Couldn&apos;t load &quot;{report.name}&quot;</h1>
+        <div className="space-y-3 text-xs font-mono">
+          <div className="border border-border bg-surface rounded-md p-3">
+            <div className="text-dim uppercase tracking-widest text-[10px] mb-1.5 font-display">
+              Sheet (Sync_{report.row})
+            </div>
+            <div className="text-down break-words">{sheetError || 'No error reported'}</div>
+          </div>
+          <div className="border border-border bg-surface rounded-md p-3">
+            <div className="text-dim uppercase tracking-widest text-[10px] mb-1.5 font-display">
+              Live Mixpanel fallback
+            </div>
+            <div className="text-down break-words">{liveError || 'No error reported'}</div>
+          </div>
+        </div>
+        <p className="text-dim text-xs mt-4">
+          Copy both messages above and share them to get this fixed.
+        </p>
+      </div>
+    );
   }
 
   let postgresWarning = null;
