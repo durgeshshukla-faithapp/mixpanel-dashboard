@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
-import { tagColor } from './DashboardGrid';
+import { tagColor } from './tagColors';
 
 export default function DashboardCard({ row, name, tag, owner, hrefPrefix = '/dashboard', subtitle = 'Live from Mixpanel' }) {
   const router = useRouter();
