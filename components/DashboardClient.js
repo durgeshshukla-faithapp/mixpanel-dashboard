@@ -39,6 +39,11 @@ export default function DashboardClient({ matrices, funnelData = null }) {
   // Initialize state from URL (shareable filter links) or sensible defaults
   const [view, setView] = useState(searchParams.get('view') || 'trend');
   const [tableSearch, setTableSearch] = useState('');
+  const [sourceSearch, setSourceSearch] = useState('');
+  const QUICK_RANGES = [
+    { label: '7D', days: 7 }, { label: '14D', days: 14 },
+    { label: '30D', days: 30 }, { label: '90D', days: 90 },
+  ];
   const [metric, setMetric] = useState(searchParams.get('metric') || metricKeys[0] || '');
   const mat = matrices[metric] || { sources: [], dates: [], data: {} };
 
@@ -261,6 +266,9 @@ export default function DashboardClient({ matrices, funnelData = null }) {
   }, [matrices, metricKeys, dateFrom, dateTo]);
 
   // Detailed table: one row per (source, date), all metrics side by side
+  const [sortCol, setSortCol] = useState(null); // null = date asc, number = metric index
+  const [sortAsc, setSortAsc] = useState(false);
+
   const detailedRows = useMemo(() => {
     const allSources = Array.from(new Set(metricKeys.flatMap((k) => matrices[k].sources)));
     const rows = [];
@@ -275,9 +283,19 @@ export default function DashboardClient({ matrices, funnelData = null }) {
     const filtered = tableSearch
       ? rows.filter((r) => r.source.toLowerCase().includes(q) || fmtDate(r.date).toLowerCase().includes(q))
       : rows;
+
+    // User-controlled sort (column header click)
+    if (sortCol === 'source') {
+      filtered.sort((a, b) => sortAsc ? a.source.localeCompare(b.source) : b.source.localeCompare(a.source));
+    } else if (sortCol === 'date') {
+      filtered.sort((a, b) => sortAsc ? (a.date < b.date ? -1 : 1) : (a.date > b.date ? -1 : 1));
+    } else if (typeof sortCol === 'number') {
+      filtered.sort((a, b) => sortAsc ? a.values[sortCol] - b.values[sortCol] : b.values[sortCol] - a.values[sortCol]);
+    }
+
     const overallValues = metricKeys.map((_, i) => filtered.reduce((sum, r) => sum + r.values[i], 0));
     return { rows: filtered, overallValues };
-  }, [matrices, metricKeys, dates, tableSearch]);
+  }, [matrices, metricKeys, dates, tableSearch, sortCol, sortAsc]);
 
   function downloadCsv() {
     const headers = ['Source', 'Date', ...metricKeys.map(shortMetricName)];
@@ -317,7 +335,25 @@ export default function DashboardClient({ matrices, funnelData = null }) {
         >
           Copy link
         </button>
-        <div className="flex items-center gap-2 pb-2 ml-2">
+        <div className="flex items-center gap-2 pb-2 ml-2 flex-wrap">
+          <div className="flex gap-1">
+            {QUICK_RANGES.map((r) => {
+              const from = allDates[Math.max(0, allDates.length - r.days)];
+              const to = allDates[allDates.length - 1];
+              const active = dateFrom === from && dateTo === to;
+              return (
+                <button
+                  key={r.label}
+                  onClick={() => { setDateFrom(from); setDateTo(to); }}
+                  className={`text-[10px] px-2 py-1 rounded font-display font-medium border transition ${
+                    active ? 'border-gold/40 bg-gold/10 text-gold' : 'border-border bg-surface2 text-dim hover:border-dim'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
           <input
             type="date" value={dateFrom} min={allDates[0]} max={allDates[allDates.length - 1]}
             onChange={(e) => setDateFrom(e.target.value)}
@@ -375,7 +411,17 @@ export default function DashboardClient({ matrices, funnelData = null }) {
           </div>
 
           <div className="flex flex-wrap gap-2 mb-4">
-            {sourceOptions.map((s, i) => (
+            {sourceOptions.length > 6 && (
+              <input
+                value={sourceSearch}
+                onChange={(e) => setSourceSearch(e.target.value)}
+                placeholder="Filter sources..."
+                className="bg-surface2 border border-border rounded-md px-3 py-1.5 text-xs font-mono w-full sm:w-48"
+              />
+            )}
+            {sourceOptions
+              .filter((s) => !sourceSearch || s.toLowerCase().includes(sourceSearch.toLowerCase()))
+              .map((s, i) => (
               <button
                 key={s}
                 onClick={() => toggleSource(s)}
@@ -481,11 +527,15 @@ export default function DashboardClient({ matrices, funnelData = null }) {
             <table className="w-full text-xs">
               <thead>
                 <tr>
-                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap">Source</th>
-                  <th className="text-left py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap">Date</th>
-                  {metricKeys.map((k) => (
-                    <th key={k} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap">
-                      {shortMetricName(k)}
+                  <th onClick={() => { setSortCol('source'); setSortAsc(sortCol === 'source' ? !sortAsc : true); }} className="text-left py-2 px-2 text-dim uppercase tracking-wide font-display font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap cursor-pointer hover:text-gold select-none">
+                    Source {sortCol === 'source' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  <th onClick={() => { setSortCol('date'); setSortAsc(sortCol === 'date' ? !sortAsc : false); }} className="text-left py-2 px-2 text-dim uppercase tracking-wide font-display font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap cursor-pointer hover:text-gold select-none">
+                    Date {sortCol === 'date' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  {metricKeys.map((k, j) => (
+                    <th key={k} onClick={() => { setSortCol(j); setSortAsc(sortCol === j ? !sortAsc : false); }} className="text-right py-2 px-2 text-dim uppercase tracking-wide font-display font-medium border-b border-border sticky top-0 bg-surface whitespace-nowrap cursor-pointer hover:text-gold select-none">
+                      {shortMetricName(k)} {sortCol === j ? (sortAsc ? '↑' : '↓') : ''}
                     </th>
                   ))}
                 </tr>
