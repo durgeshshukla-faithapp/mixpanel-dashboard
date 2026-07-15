@@ -13,11 +13,38 @@ import BackLink from '@/components/BackLink';
 export const revalidate = 300;
 export const maxDuration = 60;
 
+// Bump on every release so the deployed version is verifiable from the UI.
+const APP_VERSION = 'v29';
+
 function hasAnyData(matrices) {
   return Object.values(matrices).some((m) => m.sources.length > 0);
 }
 
+// Renders the real error text on screen. Next.js hides error messages in production
+// (only a digest reaches error.js), which made every failure look like the same
+// generic "couldn't load" page. Catching here keeps the actual cause visible.
+function ErrorPanel({ title, message }) {
+  return (
+    <div className="max-w-2xl mx-auto px-5 py-16">
+      <BackLink />
+      <h1 className="font-display text-lg font-bold mt-6 mb-4">{title}</h1>
+      <div className="border border-border bg-surface rounded-md p-3">
+        <div className="text-xs font-mono text-down break-words whitespace-pre-wrap">{message}</div>
+      </div>
+      <p className="text-dim text-xs mt-4">Copy this message and share it to get it fixed. ({APP_VERSION})</p>
+    </div>
+  );
+}
+
 export default async function DashboardPage({ params }) {
+  try {
+    return await renderDashboard(params);
+  } catch (err) {
+    return <ErrorPanel title="Something went wrong loading this dashboard" message={err?.message || String(err)} />;
+  }
+}
+
+async function renderDashboard(params) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return (
@@ -148,7 +175,7 @@ export default async function DashboardPage({ params }) {
       <div className="flex items-baseline justify-between flex-wrap gap-2 mb-6">
         <h1 className="font-display text-xl font-bold tracking-tight">{report.name}</h1>
         <span className="text-[11px] text-dim font-mono">
-          {dataSource === 'synced' ? 'Synced' : 'Live'} {syncedAt ? new Date(syncedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
+          {dataSource === 'synced' ? 'Synced' : 'Live'} {syncedAt ? new Date(syncedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''} · {APP_VERSION}
         </span>
       </div>
       <DataShapeWarning reportName={report.name} warnings={shapeWarnings} />
