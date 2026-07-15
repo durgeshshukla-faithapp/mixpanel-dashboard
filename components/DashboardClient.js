@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 
-const PALETTE = [PALETTE[0], PALETTE[1], PALETTE[2], PALETTE[3], PALETTE[4], PALETTE[5], PALETTE[6], PALETTE[7]];
+const PALETTE = ['#C9A96E', '#4E9B6F', '#5B8FA8', '#7A6BA8', '#A85050', '#6BA88C', '#A89B5B', '#5A5D5B'];
 const OVERALL = 'Overall';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
