@@ -72,12 +72,11 @@ export async function GET(req) {
 
       // ── A/B format ──
       if (report.slackFormat === 'ab') {
-        // For A/B reports, fetch live from Mixpanel (static totals, not date-based)
-        const { extractReportId, fetchMixpanelReport } = await import('@/lib/mixpanel');
+        const { extractReportId, fetchMixpanelABReport } = await import('@/lib/mixpanel');
         const reportId = extractReportId(report.link);
         if (!reportId) throw new Error('Could not parse report ID');
-        const raw = await fetchMixpanelReport(reportId);
-        const blocks = buildABBlocks(report.name, raw?.series || raw?.results || raw);
+        const results = await fetchMixpanelABReport(reportId);
+        const blocks = buildABBlocks(report.name, results);
         await postToSlack(blocks, `${report.name} A/B`);
         sent.push(report.name);
         continue;
