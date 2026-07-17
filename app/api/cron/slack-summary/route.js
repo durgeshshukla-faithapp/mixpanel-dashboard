@@ -106,7 +106,7 @@ export async function GET(req) {
         errors.push({ report: report.name, error: 'No data returned from Mixpanel' });
         continue;
       }
-      const stats = computeStats(matrices, todayIso, report.slackMetrics);
+      const stats = computeStats(matrices, todayIso, report.slackMetrics, report.goals || {});
       if (!Object.keys(stats).length) {
         errors.push({ report: report.name, error: `No metrics matched "${report.slackMetrics}"` });
         continue;

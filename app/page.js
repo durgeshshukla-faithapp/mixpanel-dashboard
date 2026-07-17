@@ -53,6 +53,9 @@ export default async function HomePage() {
           <a href="/explore" className="text-[11px] text-gold border border-gold/30 rounded-md px-3 py-1.5 hover:bg-gold/10 transition font-display">
             ✦ Explore
           </a>
+          <a href="/compare" className="text-[11px] text-dim border border-border rounded-md px-3 py-1.5 hover:text-text hover:border-gold/40 transition font-display">
+            ⇄ Compare
+          </a>
           {session.user.email?.toLowerCase().trim() === (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim() && (
             <a href="/admin" className="text-[11px] text-dim border border-border rounded-md px-3 py-1.5 hover:text-text hover:border-gold/40 transition font-display">
               Admin
