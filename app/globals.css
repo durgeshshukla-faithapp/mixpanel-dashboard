@@ -3,38 +3,49 @@
 @tailwind components;
 @tailwind utilities;
 
-:root, .dark {
-  --bg: #0D0F0E;
-  --surface: #1A1C1B;
-  --surface2: #222423;
-  --border: #2A2C2B;
-  --text: #F5F2ED;
-  --dim: #7A7D7B;
+:root {
+  --bg: #0A0B0A;
+  --surface: #121412;
+  --surface2: #1A1C1A;
+  --border: #252725;
+  --text: #F0EDE8;
+  --dim: #6B6E6A;
   --gold: #C9A96E;
-  --up: #4E9B6F;
+  --up: #4A9B6F;
   --down: #A85050;
+  --warn: #C9A96E;
 }
 
 .light {
-  --bg: #F5F2ED;
+  --bg: #F7F5F0;
   --surface: #FFFFFF;
-  --surface2: #EDEAE4;
-  --border: #D6D3CD;
-  --text: #1A1C1B;
-  --dim: #6A6D6B;
-  --gold: #9E8350;
+  --surface2: #EFEDE8;
+  --border: #E0DDD8;
+  --text: #1A1C1A;
+  --dim: #6B6E6A;
+  --gold: #9E7E4A;
   --up: #3A7A55;
   --down: #8B3E3E;
+  --warn: #9E7E4A;
 }
+
+* { box-sizing: border-box; }
 
 body {
   background: var(--bg);
   color: var(--text);
-  transition: background 0.15s, color 0.15s;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar { height: 5px; width: 5px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar { height: 4px; width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-track { background: transparent; }
 
 .num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
 .display { font-family: 'Space Grotesk', sans-serif; }
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.5);
+  cursor: pointer;
+}
