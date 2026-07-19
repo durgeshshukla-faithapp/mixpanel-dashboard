@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getReports, getSyncedMatrices, saveFunnelSnapshot, getFunnelBaseline } from '@/lib/googleSheets';
 import {
-  extractReportId, fetchMixpanelReport, buildAllMatrices, pruneEmptySources
+  extractReportId, fetchMixpanelReport, fetchMixpanelABReport, buildAllMatrices, pruneEmptySources
 } from '@/lib/mixpanel';
 import {
   postToSlack, computeStats,
@@ -86,8 +86,9 @@ export async function GET(req) {
             const reportId = extractReportId(r.link);
             if (!reportId) continue;
             try {
-              const raw = await fetchMixpanelReport(reportId);
-              const results = raw?.results || raw;
+              // fetchMixpanelABReport hits /query/report which returns { results: {...} }
+              // where each metric maps to { rows: [[value]] } — perfect for funnels
+              const results = await fetchMixpanelABReport(reportId);
               funnelsData.push({ name: r.name, results });
               // Snapshot today for tomorrow's drop-detection baseline
               await saveFunnelSnapshot(r.row, todayIso, results);
@@ -106,8 +107,7 @@ export async function GET(req) {
         // Single funnel (no group) — send its own message with worst-step + drop alerts
         const reportId = extractReportId(report.link);
         if (!reportId) throw new Error('Could not parse report ID');
-        const raw = await fetchMixpanelReport(reportId);
-        const results = raw?.results || raw;
+        const results = await fetchMixpanelABReport(reportId);
         const baseline = await getFunnelBaseline(report.row, todayIso);
         const blocks = buildFunnelSummaryBlocks(report.name, results, baseline);
         await postToSlack(blocks, `${report.name} · Funnel Summary`);
