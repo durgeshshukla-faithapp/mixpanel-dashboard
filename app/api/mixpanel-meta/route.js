@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getEventNames, getTopProperties, getTopPropertyValues, listSavedFunnels } from '@/lib/mixpanelQuery';
+import { getTopProperties, getTopPropertyValues, listSavedFunnels } from '@/lib/mixpanelQuery';
+import { SOULSENSEI_EVENTS, EVENT_TOP_PROPERTIES } from '@/lib/mixpanelEvents';
 
 export async function GET(req) {
   const session = await getServerSession(authOptions);
@@ -12,11 +13,16 @@ export async function GET(req) {
 
   try {
     if (kind === 'events') {
-      return NextResponse.json({ events: await getEventNames() });
+      // Use pre-loaded list — instant, no API call, no rate limit
+      return NextResponse.json({ events: SOULSENSEI_EVENTS, cached: true });
     }
     if (kind === 'properties') {
       const event = searchParams.get('event');
       if (!event) return NextResponse.json({ error: 'Missing event' }, { status: 400 });
+      // Try cached first
+      const cached = EVENT_TOP_PROPERTIES[event];
+      if (cached) return NextResponse.json({ properties: cached, cached: true });
+      // Fallback to API
       return NextResponse.json({ properties: await getTopProperties(event) });
     }
     if (kind === 'values') {
