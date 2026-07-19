@@ -20,20 +20,17 @@ function authOk(req) {
   return authHeader === `Bearer ${secret}` || urlSecret === secret;
 }
 
-// Fetches LIVE data from Mixpanel for a report (accurate end-of-day data)
-// Falls back to synced Sheet data if Mixpanel fails (rate limit etc.)
+// Live Mixpanel data with fallback to synced Sheet data on rate-limit
 async function getLiveMatrices(report) {
   const reportId = extractReportId(report.link);
   if (!reportId) throw new Error('Could not parse report ID');
-
   try {
     const raw = await fetchMixpanelReport(reportId);
     const { matrices } = buildAllMatrices(raw);
     return pruneEmptySources(matrices);
   } catch (err) {
-    // Rate limit or API error — fall back to synced data
     if (/429|rate.?limit/i.test(err.message)) {
-      console.warn(`[slack-summary] Rate limited for ${report.name}, falling back to synced data`);
+      console.warn(`[slack-summary] Rate limited for ${report.name}, falling back to Sheet-synced data`);
       return await getSyncedMatrices(report.row);
     }
     throw err;
@@ -43,7 +40,6 @@ async function getLiveMatrices(report) {
 export async function GET(req) {
   if (!authOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Use IST (UTC+5:30) for "today" since SoulSensei is India-based
   const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
   const todayIso = nowIST.toISOString().slice(0, 10);
 
@@ -58,22 +54,77 @@ export async function GET(req) {
   const errors = [];
   const processedGroups = new Set();
 
-  const groupedReports = {};
-  slackReports.forEach((r) => {
-    if (r.slackGroup) {
-      if (!groupedReports[r.slackGroup]) groupedReports[r.slackGroup] = [];
-      groupedReports[r.slackGroup].push(r);
-    }
-  });
-
   for (const report of slackReports) {
     try {
-      // ── Grouped table (PDP Rails / Slots) ──
+      // ────────────────────────────────────────────────────────────────────
+      // Route by slackFormat FIRST (not slackGroup) so funnel + AB reports
+      // never accidentally fall into the time-series group_row path
+      // ────────────────────────────────────────────────────────────────────
+
+      // ── A/B format (live from Mixpanel, no dates needed) ──
+      if (report.slackFormat === 'ab') {
+        const reportId = extractReportId(report.link);
+        if (!reportId) throw new Error('Could not parse report ID');
+        const blocks = await fetchAndBuildABBlocks(reportId, report.name);
+        await postToSlack(blocks, `${report.name} A/B`);
+        sent.push(report.name);
+        continue;
+      }
+
+      // ── Funnel summary + comparison (single values per step, no dates) ──
+      if (report.slackFormat === 'funnel_summary') {
+        // Combined: multiple funnels with same slackGroup → one comparison table
+        if (report.slackGroup) {
+          if (processedGroups.has(report.slackGroup)) continue;
+          processedGroups.add(report.slackGroup);
+
+          const group = slackReports.filter((r) =>
+            r.slackFormat === 'funnel_summary' && r.slackGroup === report.slackGroup
+          );
+          const funnelsData = [];
+          for (const r of group) {
+            const reportId = extractReportId(r.link);
+            if (!reportId) continue;
+            try {
+              const raw = await fetchMixpanelReport(reportId);
+              const results = raw?.results || raw;
+              funnelsData.push({ name: r.name, results });
+              // Snapshot today for tomorrow's drop-detection baseline
+              await saveFunnelSnapshot(r.row, todayIso, results);
+            } catch (err) {
+              errors.push({ report: r.name, error: err.message });
+            }
+          }
+          if (funnelsData.length === 0) continue;
+          const groupTitle = report.slackGroup.toUpperCase().replace(/_/g, ' ') + ' comparison';
+          const blocks = buildFunnelComparisonBlocks(groupTitle, funnelsData);
+          await postToSlack(blocks, groupTitle);
+          sent.push(report.slackGroup);
+          continue;
+        }
+
+        // Single funnel (no group) — send its own message with worst-step + drop alerts
+        const reportId = extractReportId(report.link);
+        if (!reportId) throw new Error('Could not parse report ID');
+        const raw = await fetchMixpanelReport(reportId);
+        const results = raw?.results || raw;
+        const baseline = await getFunnelBaseline(report.row, todayIso);
+        const blocks = buildFunnelSummaryBlocks(report.name, results, baseline);
+        await postToSlack(blocks, `${report.name} · Funnel Summary`);
+        await saveFunnelSnapshot(report.row, todayIso, results);
+        sent.push(report.name);
+        continue;
+      }
+
+      // ── Time-series grouped table (PDP Rails / Slots style) ──
+      // Only reports WITHOUT ab/funnel_summary format land here
       if (report.slackGroup) {
         if (processedGroups.has(report.slackGroup)) continue;
         processedGroups.add(report.slackGroup);
 
-        const group = groupedReports[report.slackGroup];
+        const group = slackReports.filter((r) =>
+          !r.slackFormat && r.slackGroup === report.slackGroup
+        );
         const reportsData = [];
         for (const r of group) {
           const matrices = await getLiveMatrices(r);
@@ -91,69 +142,7 @@ export async function GET(req) {
         continue;
       }
 
-      // ── A/B format ──
-      if (report.slackFormat === 'ab') {
-        const reportId = extractReportId(report.link);
-        if (!reportId) throw new Error('Could not parse report ID');
-        const blocks = await fetchAndBuildABBlocks(reportId, report.name);
-        await postToSlack(blocks, `${report.name} A/B`);
-        sent.push(report.name);
-        continue;
-      }
-
-      // ── Funnel comparison (multiple funnels in one table) ──
-      // Reports with slackFormat='funnel_summary' AND same slackGroup are combined.
-      if (report.slackFormat === 'funnel_summary' && report.slackGroup) {
-        if (processedGroups.has(report.slackGroup)) continue;
-        processedGroups.add(report.slackGroup);
-
-        const group = slackReports.filter((r) =>
-          r.slackFormat === 'funnel_summary' && r.slackGroup === report.slackGroup
-        );
-        const funnelsData = [];
-        for (const r of group) {
-          const reportId = extractReportId(r.link);
-          if (!reportId) continue;
-          try {
-            const raw = await fetchMixpanelReport(reportId);
-            const results = raw?.results || raw;
-            funnelsData.push({ name: r.name, results });
-            // Save today's snapshot for tomorrow's baseline comparison
-            await saveFunnelSnapshot(r.row, todayIso, results);
-          } catch (err) {
-            errors.push({ report: r.name, error: err.message });
-          }
-        }
-        if (funnelsData.length === 0) continue;
-
-        const groupTitle = report.slackGroup.toUpperCase().replace(/_/g, ' ') + ' comparison';
-        const blocks = buildFunnelComparisonBlocks(groupTitle, funnelsData);
-        await postToSlack(blocks, `${groupTitle}`);
-        sent.push(report.slackGroup);
-        continue;
-      }
-
-      // ── Funnel summary (single funnel, with baseline comparison) ──
-      if (report.slackFormat === 'funnel_summary') {
-        const reportId = extractReportId(report.link);
-        if (!reportId) throw new Error('Could not parse report ID');
-        const raw = await fetchMixpanelReport(reportId);
-        const results = raw?.results || raw;
-
-        // Load yesterday's snapshot for drop detection
-        const baseline = await getFunnelBaseline(report.row, todayIso);
-
-        const blocks = buildFunnelSummaryBlocks(report.name, results, baseline);
-        await postToSlack(blocks, `${report.name} · Funnel Summary`);
-
-        // Save today's snapshot for tomorrow's comparison
-        await saveFunnelSnapshot(report.row, todayIso, results);
-
-        sent.push(report.name);
-        continue;
-      }
-
-      // ── Normal end-of-day: LIVE Mixpanel data ──
+      // ── Normal end-of-day (time-series, live Mixpanel) ──
       const matrices = await getLiveMatrices(report);
       if (!Object.keys(matrices).length) {
         errors.push({ report: report.name, error: 'No data returned from Mixpanel' });
