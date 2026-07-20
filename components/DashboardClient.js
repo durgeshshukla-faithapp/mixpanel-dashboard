@@ -320,7 +320,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
           <button
             key={key}
             onClick={() => setView(key)}
-            className={`text-sm px-4 py-2 border-b-2 transition ${
+            className={`text-[12px] px-4 py-2 border-b-2 font-display font-medium transition ${
               view === key ? 'border-gold text-text font-medium' : 'border-transparent text-dim'
             }`}
           >
@@ -379,33 +379,38 @@ export default function DashboardClient({ matrices, funnelData = null }) {
 
       {view === 'trend' ? (
         <div className="border border-border bg-surface rounded-lg p-5">
-          <div className="flex flex-wrap gap-2 mb-4">
-            <select
-              value={metric}
-              onChange={(e) => handleMetricChange(e.target.value)}
-              className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
-            >
-              {metricKeys.map((m) => <option key={m} value={m}>{shortMetricName(m)}</option>)}
-            </select>
+          <div className="flex flex-wrap gap-2 mb-4 items-center">
+            {/* Searchable metric picker */}
+            <div className="relative">
+              <select
+                value={metric}
+                onChange={(e) => handleMetricChange(e.target.value)}
+                className="bg-gold/10 border border-gold/30 text-gold rounded-md px-3 py-1.5 text-xs font-display font-medium appearance-none pr-7 cursor-pointer hover:bg-gold/15 transition"
+              >
+                {metricKeys.map((m) => <option key={m} value={m}>{shortMetricName(m)}</option>)}
+              </select>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gold text-[10px] pointer-events-none">▾</span>
+            </div>
+            <div className="w-px h-5 bg-border mx-1" />
             <select
               value={chartType}
               onChange={(e) => setChartType(e.target.value)}
-              className="bg-surface2 border border-border rounded-lg px-3 py-2 text-xs"
+              className="bg-surface2 border border-border rounded-md px-2 py-1.5 text-xs font-mono hover:border-dim transition"
             >
               <option value="line">Line</option>
               <option value="bar">Bar</option>
-              <option value="pie">Pie (totals)</option>
+              <option value="pie">Pie</option>
             </select>
-            <label className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 cursor-pointer">
-              <input type="checkbox" checked={showMovingAvg} onChange={(e) => setShowMovingAvg(e.target.checked)} />
-              7-day avg
+            <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface2 cursor-pointer hover:border-dim transition">
+              <input type="checkbox" checked={showMovingAvg} onChange={(e) => setShowMovingAvg(e.target.checked)} className="accent-gold" />
+              7d avg
             </label>
-            <label className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 cursor-pointer">
-              <input type="checkbox" checked={comparePrevious} onChange={(e) => setComparePrevious(e.target.checked)} />
-              Compare to previous period
+            <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface2 cursor-pointer hover:border-dim transition">
+              <input type="checkbox" checked={comparePrevious} onChange={(e) => setComparePrevious(e.target.checked)} className="accent-gold" />
+              vs prior period
             </label>
-            <label className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 cursor-pointer">
-              <input type="checkbox" checked={cumulative} onChange={(e) => setCumulative(e.target.checked)} />
+            <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface2 cursor-pointer hover:border-dim transition">
+              <input type="checkbox" checked={cumulative} onChange={(e) => setCumulative(e.target.checked)} className="accent-gold" />
               Cumulative
             </label>
           </div>
@@ -443,7 +448,16 @@ export default function DashboardClient({ matrices, funnelData = null }) {
                 <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110} animationDuration={700} animationEasing="ease-out">
                   {pieData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                <Tooltip contentStyle={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontFamily: 'JetBrains Mono, monospace',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                  }}
+                  formatter={(v) => [fmtNum(v), '']}
+                  labelStyle={{ color: 'var(--dim)', fontSize: 10, marginBottom: 2 }} />
                 <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
               </PieChart>
             </ResponsiveContainer>
@@ -454,7 +468,16 @@ export default function DashboardClient({ matrices, funnelData = null }) {
                   <CartesianGrid stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="date" tick={{ fill: 'var(--dim)', fontSize: 11 }} />
                   <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Tooltip contentStyle={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontFamily: 'JetBrains Mono, monospace',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                  }}
+                  formatter={(v) => [fmtNum(v), '']}
+                  labelStyle={{ color: 'var(--dim)', fontSize: 10, marginBottom: 2 }} />
                   <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
                   {!cumulative && sources.map((s, i) => <Bar key={s} dataKey={s} fill={PALETTE[i % PALETTE.length]} animationDuration={700} animationEasing="ease-out" />)}
                   {cumulative && <Bar dataKey="__cumulative" name="Cumulative" fill={PALETTE[0]} animationDuration={700} animationEasing="ease-out" />}
@@ -466,7 +489,16 @@ export default function DashboardClient({ matrices, funnelData = null }) {
                   <CartesianGrid stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="date" tick={{ fill: 'var(--dim)', fontSize: 11 }} />
                   <YAxis tick={{ fill: 'var(--dim)', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Tooltip contentStyle={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontFamily: 'JetBrains Mono, monospace',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                  }}
+                  formatter={(v) => [fmtNum(v), '']}
+                  labelStyle={{ color: 'var(--dim)', fontSize: 10, marginBottom: 2 }} />
                   <Legend wrapperStyle={{ fontSize: 12, color: 'var(--dim)' }} />
                   {!cumulative && sources.map((s, i) => (
                     <Line key={s} type="monotone" dataKey={s} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} animationDuration={700} animationEasing="ease-out" />
@@ -542,20 +574,20 @@ export default function DashboardClient({ matrices, funnelData = null }) {
               </thead>
               <tbody>
                 {detailedRows.rows.map((r, i) => (
-                  <tr key={r.source + r.date + i}>
-                    <td className="py-2 px-2 border-b border-border">{r.source}</td>
-                    <td className="py-2 px-2 border-b border-border num text-dim whitespace-nowrap">{fmtDate(r.date)}</td>
+                  <tr key={r.source + r.date + i} className={i % 2 === 0 ? '' : 'bg-surface2/30'}>
+                    <td className="py-1.5 px-2 border-b border-border text-[11px]">{r.source}</td>
+                    <td className="py-1.5 px-2 border-b border-border num text-dim whitespace-nowrap text-[11px]">{fmtDate(r.date)}</td>
                     {r.values.map((v, j) => (
-                      <td key={j} className="text-right py-2 px-2 border-b border-border num">{fmtNum(v)}</td>
+                      <td key={j} className="text-right py-1.5 px-2 border-b border-border num text-[11px]">{fmtNum(v)}</td>
                     ))}
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="font-medium">
-                  <td className="py-2 px-2 border-t border-border" colSpan={2}>Overall</td>
+                <tr className="bg-gold/5 border-t-2 border-gold/20">
+                  <td className="py-2 px-2 text-[11px] font-display font-semibold text-gold" colSpan={2}>Total</td>
                   {detailedRows.overallValues.map((v, j) => (
-                    <td key={j} className="text-right py-2 px-2 border-t border-border num">{fmtNum(v)}</td>
+                    <td key={j} className="text-right py-2 px-2 num text-[11px] font-semibold text-gold">{fmtNum(v)}</td>
                   ))}
                 </tr>
               </tfoot>
@@ -668,28 +700,28 @@ export default function DashboardClient({ matrices, funnelData = null }) {
       {view === 'trend' && kpis && (
         <div className="border border-border bg-surface rounded-lg p-5 mt-5">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-xs font-semibold text-dim uppercase tracking-wide">Key points</h2>
+            <h2 className="text-[10px] font-display font-semibold text-dim uppercase tracking-widest">Key signals</h2>
             <button
               onClick={() => explainWithAi(kpis, metric)}
               disabled={aiLoading}
-              className="text-xs px-3 py-1.5 rounded-lg border border-border bg-surface2 hover:border-gold/40 transition disabled:opacity-50"
+              className="text-[11px] px-3 py-1.5 rounded-md border border-gold/30 text-gold bg-gold/5 hover:bg-gold/10 transition disabled:opacity-50 font-display"
             >
-              {aiLoading ? 'Thinking...' : '✨ Explain this'}
+              {aiLoading ? 'Thinking...' : '✦ Explain'}
             </button>
           </div>
           {aiExplanation && (
-            <div className="text-sm bg-accent/5 border border-gold/20 rounded-lg px-3 py-2 mb-3">
+            <div className="text-xs bg-gold/5 border border-gold/20 rounded-md px-3 py-2.5 mb-3 leading-relaxed font-mono">
               {aiExplanation}
             </div>
           )}
-          <ul className="text-sm space-y-2">
+          <ul className="text-xs space-y-2">
             <li className="flex gap-2 pb-2 border-b border-border">
-              <span className="text-gold num">&rarr;</span>
-              Peak day: <span className="num">{kpis.peak.date}</span> ({fmtNum(kpis.peak.value)})
+              <span className="text-gold">→</span>
+              Peak: <span className="num font-medium">{kpis.peak.date}</span> <span className="text-gold num">({fmtNum(kpis.peak.value)})</span>
             </li>
             <li className="flex gap-2 pb-2 border-b border-border">
-              <span className="text-gold num">&rarr;</span>
-              Lowest day: <span className="num">{kpis.low.date}</span> ({fmtNum(kpis.low.value)})
+              <span className="text-dim">→</span>
+              Lowest: <span className="num font-medium">{kpis.low.date}</span> <span className="text-down num">({fmtNum(kpis.low.value)})</span>
             </li>
             {kpis.wow !== null && (
               <li className="flex gap-2 pb-2 border-b border-border">
@@ -711,16 +743,22 @@ export default function DashboardClient({ matrices, funnelData = null }) {
 }
 
 function Kpi({ label, value, delta, sub }) {
+  const barColor = delta === undefined || delta === null
+    ? 'bg-gold'
+    : delta >= 0 ? 'bg-up' : 'bg-down';
   return (
-    <div className="border border-border bg-surface rounded-lg p-4">
-      <div className="text-[11px] text-dim uppercase tracking-wide mb-1.5">{label}</div>
-      <div className="text-2xl font-display font-bold">{value}</div>
-      {sub && <div className="text-[11px] text-dim mt-1 num">{sub}</div>}
-      {delta !== undefined && delta !== null && (
-        <div className={`text-xs mt-1 ${delta >= 0 ? 'text-gold' : 'text-down'}`}>
-          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}% vs prior 7d
-        </div>
-      )}
+    <div className="border border-border bg-surface rounded-lg p-4 flex gap-3">
+      <div className={`w-0.5 rounded-full self-stretch shrink-0 ${barColor}`} />
+      <div className="min-w-0">
+        <div className="text-[10px] text-dim uppercase tracking-widest font-display font-medium mb-1.5">{label}</div>
+        <div className="text-xl font-display font-bold truncate">{value}</div>
+        {sub && <div className="text-[11px] text-dim mt-1 num">{sub}</div>}
+        {delta !== undefined && delta !== null && (
+          <div className={`text-[11px] mt-1 num ${delta >= 0 ? 'text-up' : 'text-down'}`}>
+            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}% vs prior 7d
+          </div>
+        )}
+      </div>
     </div>
   );
 }

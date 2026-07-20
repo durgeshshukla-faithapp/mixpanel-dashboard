@@ -1,7 +1,8 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getReportByRow, getAllowedSourcesForEmail, isDashboardAllowed, getSyncedMatrices, getSyncTimestamp } from '@/lib/googleSheets';
-import { extractReportId, fetchMixpanelReport, buildAllMatrices, filterMatricesBySources, pruneEmptySources, extractFunnelId, fetchMixpanelFunnel } from '@/lib/mixpanel';
+import { extractReportId, fetchMixpanelReport, filterMatricesBySources, pruneEmptySources } from '@/lib/mixpanel';
+import { buildMatricesFromRaw } from '@/lib/reportAdapter';
 import { runDateSeriesQuery } from '@/lib/postgres';
 import DashboardClient from '@/components/DashboardClient';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -104,9 +105,10 @@ async function renderDashboard(params) {
     } else {
       try {
         const raw = await fetchMixpanelReport(reportId);
-        const built = buildAllMatrices(raw);
-        shapeWarnings = built.warnings;
-        matrices = pruneEmptySources(filterMatricesBySources(built.matrices, allowedSources));
+        const todayIso = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const built = buildMatricesFromRaw(raw, todayIso);
+        shapeWarnings = [];
+        matrices = pruneEmptySources(filterMatricesBySources(built, allowedSources));
         syncedAt = new Date().toISOString();
       } catch (err) {
         liveError = err.message;
