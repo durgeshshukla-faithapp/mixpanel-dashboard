@@ -11,13 +11,13 @@ const OVERALL = 'Overall';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function fmtNum(n) {
-  if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(2) + 'M';
-  if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + 'K';
-  // Values between 0 and 1 are almost certainly rates/percentages (e.g. conversion
-  // rate 0.077558), not integer counts - show them as a percentage instead of
-  // rounding to 0.
-  if (n !== 0 && Math.abs(n) < 1) return (n * 100).toFixed(1) + '%';
-  return Math.round(n).toLocaleString();
+  if (n == null || isNaN(n)) return '—';
+  // Percentages: exact with 2 decimal places
+  if (n !== 0 && Math.abs(n) < 1) return (n * 100).toFixed(2) + '%';
+  // Whole numbers: exact Indian locale (no K/M abbreviation)
+  if (Number.isInteger(n)) return n.toLocaleString('en-IN');
+  // Decimals: up to 2 decimal places, no trailing zeros
+  return parseFloat(n.toFixed(2)).toLocaleString('en-IN');
 }
 
 function shortMetricName(name) {
