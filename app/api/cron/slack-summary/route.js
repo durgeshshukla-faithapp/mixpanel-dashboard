@@ -12,6 +12,8 @@ import { fetchAndBuildABBlocks } from '@/lib/slackAB';
 
 export const maxDuration = 60;
 
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
 function authOk(req) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return true;
@@ -20,21 +22,31 @@ function authOk(req) {
   return authHeader === `Bearer ${secret}` || urlSecret === secret;
 }
 
-// Live Mixpanel data with fallback to synced Sheet data on rate-limit
+// Live Mixpanel data with retry on 429 and fallback to synced Sheet data
 async function getLiveMatrices(report) {
   const reportId = extractReportId(report.link);
   if (!reportId) throw new Error('Could not parse report ID');
-  try {
-    const raw = await fetchMixpanelReport(reportId);
-    const { matrices } = buildAllMatrices(raw);
-    return pruneEmptySources(matrices);
-  } catch (err) {
-    if (/429|rate.?limit/i.test(err.message)) {
-      console.warn(`[slack-summary] Rate limited for ${report.name}, falling back to Sheet-synced data`);
-      return await getSyncedMatrices(report.row);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const raw = await fetchMixpanelReport(reportId);
+      const { matrices } = buildAllMatrices(raw);
+      return pruneEmptySources(matrices);
+    } catch (err) {
+      if (/429|rate.?limit/i.test(err.message)) {
+        if (attempt === 0) {
+          console.warn(`[slack-summary] Rate limited for ${report.name}, waiting 10s before retry`);
+          await sleep(10000);
+          continue;
+        }
+        // After retry, fall back to synced Sheet data
+        console.warn(`[slack-summary] Rate limit retry failed for ${report.name}, using synced data`);
+        return await getSyncedMatrices(report.row);
+      }
+      throw err;
     }
-    throw err;
   }
+  return {};
 }
 
 export async function GET(req) {
@@ -156,6 +168,9 @@ export async function GET(req) {
       const blocks = buildSummaryBlocks(report.name, stats, todayIso);
       await postToSlack(blocks, `${report.name} · End of Day`);
       sent.push(report.name);
+
+      // Small delay between each report to stay within Mixpanel's rate limit
+      await sleep(1500);
 
     } catch (err) {
       errors.push({ report: report.name, error: err.message });
