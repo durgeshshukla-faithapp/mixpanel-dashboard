@@ -222,7 +222,7 @@ solve hota hai, dashboard hamesha simple/consistent data padhta hai.
 3. Service account ko Sheet pe **Editor** access do (pehle se ho chuka hai agar Admin
    Panel setup kiya tha)
 
-### Sync kaise chalta hai
+### Sync kaise chalta hai 
 
 - **Automatic:** Vercel ka apna Cron, roz raat ~3 AM UTC (Hobby plan ki 1x/day limit ke andar)
 - **Manual:** Admin Panel (`/admin`) → "Data sync" tab → "Sync now" button — turant chalta hai,
