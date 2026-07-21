@@ -236,5 +236,3 @@ Vercel ka free Cron sirf din mein 1 baar chalta hai. Zyada fresh chahiye toh:
 1. https://cron-job.org pe free account banao
 2. Naya cron job: URL = `https://mixpanel-dashboard-lilac.vercel.app/api/cron/sync?secret=YOUR_CRON_SECRET`
 3. Frequency jitni chaho rakho (jaise har 30 minute) — bilkul free
-
-## v63
