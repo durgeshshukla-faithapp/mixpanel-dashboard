@@ -222,7 +222,7 @@ solve hota hai, dashboard hamesha simple/consistent data padhta hai.
 3. Service account ko Sheet pe **Editor** access do (pehle se ho chuka hai agar Admin
    Panel setup kiya tha)
 
-### Sync kaise chalta hai 
+### Sync kaise chalta hai
 
 - **Automatic:** Vercel ka apna Cron, roz raat ~3 AM UTC (Hobby plan ki 1x/day limit ke andar)
 - **Manual:** Admin Panel (`/admin`) → "Data sync" tab → "Sync now" button — turant chalta hai,
@@ -236,3 +236,5 @@ Vercel ka free Cron sirf din mein 1 baar chalta hai. Zyada fresh chahiye toh:
 1. https://cron-job.org pe free account banao
 2. Naya cron job: URL = `https://mixpanel-dashboard-lilac.vercel.app/api/cron/sync?secret=YOUR_CRON_SECRET`
 3. Frequency jitni chaho rakho (jaise har 30 minute) — bilkul free
+
+## v63
