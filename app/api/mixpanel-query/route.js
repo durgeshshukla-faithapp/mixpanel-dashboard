@@ -41,7 +41,7 @@ export async function POST(req) {
     const isRateLimit = /429|rate.?limit/i.test(err.message || '');
     if (isRateLimit) {
       return NextResponse.json({
-        error: 'Mixpanel rate limit hit (60 queries/hour). Thoda wait karo (10-15 min) aur phir try karo. Dashboard data Sheet se aa raha hai, woh normal chalega.',
+        error: 'Mixpanel allows 60 queries per hour and that limit has been reached. Please wait 10-15 minutes and try again. Your dashboards are unaffected - they read from the synced Sheet.',
         isRateLimit: true,
       }, { status: 429 });
     }

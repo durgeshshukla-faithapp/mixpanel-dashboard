@@ -20,8 +20,11 @@ function fmtNum(n) {
   return parseFloat(n.toFixed(2)).toLocaleString('en-IN');
 }
 
+// Keeps the full descriptive metric name so different metrics never collapse into
+// the same label. Only the "A. " / "B. " ordering prefix is removed, since that
+// carries no meaning for a reader.
 function shortMetricName(name) {
-  return name.replace(/^[A-Z]\.\s*/, '').replace(/\s+(of|on)\s+\S+$/i, '');
+  return String(name || '').replace(/^[A-Z]\.\s*/, '').trim();
 }
 
 function fmtDate(iso) {
@@ -403,15 +406,15 @@ export default function DashboardClient({ matrices, funnelData = null }) {
             </select>
             <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface2 cursor-pointer hover:border-dim transition">
               <input type="checkbox" checked={showMovingAvg} onChange={(e) => setShowMovingAvg(e.target.checked)} className="accent-gold" />
-              7d avg
+              Show 7-day average
             </label>
             <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface2 cursor-pointer hover:border-dim transition">
               <input type="checkbox" checked={comparePrevious} onChange={(e) => setComparePrevious(e.target.checked)} className="accent-gold" />
-              vs prior period
+              Compare to previous period
             </label>
             <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface2 cursor-pointer hover:border-dim transition">
               <input type="checkbox" checked={cumulative} onChange={(e) => setCumulative(e.target.checked)} className="accent-gold" />
-              Cumulative
+              Running total
             </label>
           </div>
 
@@ -700,7 +703,7 @@ export default function DashboardClient({ matrices, funnelData = null }) {
       {view === 'trend' && kpis && (
         <div className="border border-border bg-surface rounded-lg p-5 mt-5">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-[10px] font-display font-semibold text-dim uppercase tracking-widest">Key signals</h2>
+            <h2 className="text-[10px] font-display font-semibold text-dim uppercase tracking-widest">What stands out</h2>
             <button
               onClick={() => explainWithAi(kpis, metric)}
               disabled={aiLoading}
@@ -717,22 +720,24 @@ export default function DashboardClient({ matrices, funnelData = null }) {
           <ul className="text-xs space-y-2">
             <li className="flex gap-2 pb-2 border-b border-border">
               <span className="text-gold">→</span>
-              Peak: <span className="num font-medium">{kpis.peak.date}</span> <span className="text-gold num">({fmtNum(kpis.peak.value)})</span>
+              <span>Best day was <span className="num font-medium">{kpis.peak.date}</span>, with <span className="text-gold num">{fmtNum(kpis.peak.value)}</span></span>
             </li>
             <li className="flex gap-2 pb-2 border-b border-border">
               <span className="text-dim">→</span>
-              Lowest: <span className="num font-medium">{kpis.low.date}</span> <span className="text-down num">({fmtNum(kpis.low.value)})</span>
+              <span>Quietest day was <span className="num font-medium">{kpis.low.date}</span>, with <span className="text-down num">{fmtNum(kpis.low.value)}</span></span>
             </li>
             {kpis.wow !== null && (
               <li className="flex gap-2 pb-2 border-b border-border">
                 <span className="text-gold num">&rarr;</span>
-                Last 7 days vs previous 7: {kpis.wow >= 0 ? '+' : ''}{kpis.wow.toFixed(1)}%
+                <span>{Math.abs(kpis.wow) < 3
+                  ? 'The last 7 days were about the same as the 7 days before'
+                  : `The last 7 days were ${Math.abs(kpis.wow).toFixed(0)}% ${kpis.wow >= 0 ? 'higher' : 'lower'} than the 7 days before`}</span>
               </li>
             )}
             {kpis.anomalies.length > 0 && kpis.anomalies.map((a) => (
               <li key={a.date} className="flex gap-2 pb-2 border-b border-border last:border-0">
                 <span className="text-gold num">&rarr;</span>
-                Unusual day: <span className="num">{a.date}</span> ({fmtNum(a.value)}, {a.z >= 0 ? 'above' : 'below'} normal range)
+                <span><span className="num">{a.date}</span> stands out — {fmtNum(a.value)}, well {a.z >= 0 ? 'above' : 'below'} the usual range</span>
               </li>
             ))}
           </ul>
@@ -754,8 +759,10 @@ function Kpi({ label, value, delta, sub }) {
         <div className="text-xl font-display font-bold truncate">{value}</div>
         {sub && <div className="text-[11px] text-dim mt-1 num">{sub}</div>}
         {delta !== undefined && delta !== null && (
-          <div className={`text-[11px] mt-1 num ${delta >= 0 ? 'text-up' : 'text-down'}`}>
-            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}% vs prior 7d
+          <div className={`text-[11px] mt-1 leading-snug ${delta >= 0 ? 'text-up' : 'text-down'}`}>
+            {Math.abs(delta) < 3
+              ? 'About the same as the previous week'
+              : `${Math.abs(delta).toFixed(0)}% ${delta >= 0 ? 'higher' : 'lower'} than the previous week`}
           </div>
         )}
       </div>

@@ -420,7 +420,7 @@ export default function QueryBuilder() {
           </div>
           {error}
           {isRateLimited && (
-            <div className="mt-2 text-dim">Dashboard data is not affected — sirf Explore queries temporarily paused.</div>
+            <div className="mt-2 text-dim">Your dashboards are unaffected. Only Explore queries are paused until the limit resets.</div>
           )}
         </div>
       )}
